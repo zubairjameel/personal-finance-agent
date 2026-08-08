@@ -1,7 +1,8 @@
 {
+    "type": "module",
     "scripts": {
-        "start": "ts-node src/index.ts",
-        "build": "tsc",
+        "start": "node src/index.ts",
+        "build": "rm -rf dist && tsc",
         "lint": "eslint .",
         "format": "prettier --write ."
     },
@@ -12,10 +13,12 @@
         "eslint-config-prettier": "^10.1.8",
         "globals": "^17.9.0",
         "prettier": "^3.9.6",
-        "ts-node": "^10.9.2",
         "typescript": "^7.0.2"
     },
     "dependencies": {
-        "dotenv": "^17.4.2"
+        "@anthropic-ai/sdk": "^0.115.0",
+        "dotenv": "^17.4.2",
+        "plaid": "^45.0.0",
+        "zod": "^4.4.3"
     }
 }
