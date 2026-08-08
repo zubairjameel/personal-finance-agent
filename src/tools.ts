@@ -189,7 +189,7 @@ export const createTools = (plaidClient: PlaidApi) => {
     const getAllTransactions = async (accountId: string) => {
         const cache = accountTransactions.get(accountId);
         const transactionsById = new Map<string, Transaction>(
-            Object.entries(cache?.transactions ?? {}),
+            (cache?.transactions ?? []).map((t) => [t.transaction_id, t]),
         );
         let cursor = cache?.cursor;
         let hasMore = true;
