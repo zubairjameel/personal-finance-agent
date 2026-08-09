@@ -22,13 +22,15 @@ ANTHROPIC_API_KEY=
 PLAID_CLIENT_ID=
 PLAID_SANDBOX_SECRET=
 PLAID_SANDBOX_ACCESS_TOKEN=
+DATABASE_URL=
 ```
 
-You need to create a Plaid sandbox and get the env keys from there.
+You need to create a Plaid sandbox and get the env keys from there. `DATABASE_URL` should point to a CockroachDB cluster (a local insecure instance works for development, e.g. `postgresql://root@localhost:26257/defaultdb?sslmode=disable`).
 
 To run the code:
 
 ```bash
 npm install
+npm run db:init
 npm run start
 ```

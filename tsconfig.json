@@ -5,10 +5,11 @@
         "outDir": "./dist",
 
         // Environment Settings
-        "module": "nodenext",
+        "module": "node20",
         "target": "esnext",
         "lib": ["esnext"],
         "types": ["node"],
+        "rewriteRelativeImportExtensions": true,
 
         // Other Outputs
         "sourceMap": true,
