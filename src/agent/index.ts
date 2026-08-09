@@ -186,10 +186,8 @@ async function main() {
             const choiceIndex = parseInt(trimmed, 10) - 1;
             const selected = sessions[choiceIndex];
             if (selected) {
-                sessionId = await resumeSession(
-                    selected.id,
-                    new Date().toISOString(),
-                );
+                sessionId = selected.id;
+                await resumeSession(sessionId, new Date().toISOString());
                 previousMessages = await loadMessages(sessionId);
                 console.log(
                     ansi.dim(

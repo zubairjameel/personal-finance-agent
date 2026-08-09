@@ -71,12 +71,11 @@ export async function createSession(userId: string): Promise<string> {
 export async function resumeSession(
     sessionId: string,
     timestamp: string,
-): Promise<string> {
-    const session = await pool.query<{ id: string }>(
-        "UPDATE sessions SET resumed_at = ($1) WHERE id = ($2) RETURNING id",
-        [timestamp, sessionId],
-    );
-    return session.rows[0]!.id;
+): Promise<void> {
+    await pool.query("UPDATE sessions SET resumed_at = $1 WHERE id = $2", [
+        timestamp,
+        sessionId,
+    ]);
 }
 
 export interface User {
