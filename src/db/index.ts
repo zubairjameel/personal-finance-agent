@@ -83,7 +83,7 @@ export interface User {
 }
 
 export async function getOrCreateUser(): Promise<User> {
-    const existing = await pool.query<User>("SELECT id FROM users LIMIT 1");
+    const existing = await pool.query<User>("SELECT id FROM users ORDER BY id ASC LIMIT 1");
     if (existing.rows[0]) {
         return existing.rows[0];
     }

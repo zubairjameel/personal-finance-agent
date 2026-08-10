@@ -9,7 +9,8 @@
         "db:init:financial": "node src/db/init-financial.ts",
         "db:seed": "node src/db/seed-sample-data.ts",
         "db:sync": "node src/mcp/sync.ts",
-        "analysis": "node src/analysis/mistakes-agent.ts"
+        "analysis": "node src/analysis/mistakes-agent.ts",
+        "background": "node src/agent/background-loop.ts"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
