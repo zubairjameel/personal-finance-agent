@@ -4,3 +4,7 @@ dist/
 .env.local
 *.log
 .claude/settings.local.json
+# CockroachDB MCP binary (downloaded via setup script — not committed)
+cockroachdb-mcp-server.zip
+bin/cockroachdb-mcp-server.exe
+bin/LICENSE
