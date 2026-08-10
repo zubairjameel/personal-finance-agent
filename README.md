@@ -34,3 +34,36 @@ npm install
 npm run db:init
 npm run start
 ```
+
+---
+
+## 🤖 CockroachDB MCP & Financial Analysis Feature
+
+This feature lets the AI search CockroachDB directly using the CockroachDB MCP Server. The AI can write SQL queries to answer questions like *"What financial mistakes did I make this year?"*.
+
+### Step 1: Download MCP Server (Windows)
+Run this script once to download the CockroachDB MCP server binary:
+```powershell
+.\setup-mcp.ps1
+```
+
+### Step 2: Setup Database & Add Sample Data
+Make sure your local CockroachDB is running, then run these two commands:
+
+```bash
+# 1. Create financial tables and views in CockroachDB
+npm run db:init:financial
+
+# 2. Add sample transactions (food delivery, gym, tech) to the database
+npm run db:seed
+```
+
+### Step 3: Run AI Financial Analysis
+Ask any financial question in plain English:
+
+```bash
+npm run analysis -- "What financial mistakes did I make this year that explain why I'm broke?"
+```
+
+> **Note**: Make sure your `ANTHROPIC_API_KEY` is added in `.env.local`.
+
