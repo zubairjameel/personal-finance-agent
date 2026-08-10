@@ -5,7 +5,11 @@
         "build": "rm -rf dist && tsc",
         "lint": "eslint .",
         "format": "prettier --write .",
-        "db:init": "node src/db/init.ts"
+        "db:init": "node src/db/init.ts",
+        "db:init:financial": "node src/db/init-financial.ts",
+        "db:seed": "node src/db/seed-sample-data.ts",
+        "db:sync": "node src/mcp/sync.ts",
+        "analysis": "node src/analysis/mistakes-agent.ts"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
