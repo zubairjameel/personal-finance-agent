@@ -8,7 +8,7 @@ async function seed() {
     await pool.query(
         `INSERT INTO accounts (id, user_id, name, type, subtype, currency)
          VALUES ($1, $2, 'Plaid Checking', 'depository', 'checking', 'USD')
-         ON CONFLICT (id) DO UPDATE SET user_id = EXCLUDED.user_id`,
+         ON CONFLICT (id) DO NOTHING`,
         [accountId, user.id],
     );
 
@@ -146,7 +146,7 @@ async function seed() {
             `INSERT INTO transactions
                (id, account_id, user_id, date, merchant_name, name, amount, currency, category_primary, pending)
              VALUES ($1, $2, $3, $4, $5, $6, $7, 'USD', $8, false)
-             ON CONFLICT (id) DO UPDATE SET user_id = EXCLUDED.user_id`,
+             ON CONFLICT (id) DO NOTHING`,
             [
                 t.id,
                 accountId,

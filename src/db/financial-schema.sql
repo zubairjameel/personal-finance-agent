@@ -89,21 +89,3 @@ FROM transactions t
 JOIN accounts a ON a.id = t.account_id
 WHERE t.amount < 0   -- income only
   AND t.pending = false;
-
--- Detected spending anomalies & alerts queued for user notification (e.g. Telegram)
-CREATE TABLE IF NOT EXISTS anomalies (
-    id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id        UUID        NOT NULL REFERENCES users(id),
-    transaction_id STRING      REFERENCES transactions(id),
-    type           STRING      NOT NULL, -- 'SPENDING_SPIKE', 'DUPLICATE_CHARGE', 'HIGH_SINGLE_PURCHASE', 'NEW_SUBSCRIPTION'
-    severity       STRING      NOT NULL CHECK (severity IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')),
-    title          STRING      NOT NULL,
-    description    STRING      NOT NULL,
-    amount         DECIMAL(12, 2),
-    merchant_name  STRING,
-    status         STRING      NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'notified', 'resolved')),
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    INDEX idx_anomalies_user_status (user_id, status, created_at DESC)
-);
-
