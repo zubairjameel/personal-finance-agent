@@ -70,6 +70,25 @@ JOIN accounts a ON a.id = t.account_id
 WHERE t.amount > 0   -- spending only (Plaid: positive = money out)
   AND t.pending = false;
 
+-- Anomaly alerts queue — populated by the background daemon, consumed by Telegram bot.
+CREATE TABLE IF NOT EXISTS anomalies (
+    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID        NOT NULL REFERENCES users(id),
+    transaction_id  STRING      REFERENCES transactions(id),
+    type            STRING      NOT NULL,   -- HIGH_SINGLE_PURCHASE | SPENDING_SPIKE | DUPLICATE_CHARGE | RECURRING_SUBSCRIPTION
+    severity        STRING      NOT NULL,   -- LOW | MEDIUM | HIGH | CRITICAL
+    title           STRING      NOT NULL,
+    description     STRING      NOT NULL,
+    amount          DECIMAL(12,2) NOT NULL DEFAULT 0,
+    merchant_name   STRING,
+    status          STRING      NOT NULL DEFAULT 'pending', -- pending | notified | resolved
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    INDEX idx_anomalies_user_status (user_id, status, created_at DESC),
+    INDEX idx_anomalies_transaction  (transaction_id)
+);
+
 -- Convenience view: income only (negative amounts, sign-flipped to positive)
 CREATE VIEW IF NOT EXISTS income_history AS
 SELECT

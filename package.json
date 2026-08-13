@@ -2,14 +2,16 @@
     "type": "module",
     "scripts": {
         "start": "node src/agent/index.ts",
-        "build": "rm -rf dist && tsc",
+        "build": "npx rimraf dist && tsc",
         "lint": "eslint .",
         "format": "prettier --write .",
         "db:init": "node src/db/init.ts",
         "db:init:financial": "node src/db/init-financial.ts",
         "db:seed": "node src/db/seed-sample-data.ts",
         "db:sync": "node src/mcp/sync.ts",
-        "analysis": "node src/analysis/mistakes-agent.ts"
+        "analysis": "node src/analysis/mistakes-agent.ts",
+        "background": "node src/agent/background-loop.ts",
+        "background:watch": "node src/agent/background-loop.ts --watch"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",

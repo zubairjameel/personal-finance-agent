@@ -62,7 +62,10 @@ export async function getMcpClient(): Promise<Client> {
             ...process.env,
             CRDB_DATABASE_URL: dbUrl,
             CRDB_MCP_ALLOW_INSECURE_DB: isLocalInsecure ? "true" : "false",
-            CRDB_MCP_ENABLE_WRITE_QUERIES: "true",
+            // Write queries are disabled by default — only enable explicitly via env var.
+            // This prevents Claude from accidentally deleting or mutating real financial data.
+            CRDB_MCP_ENABLE_WRITE_QUERIES:
+                process.env["CRDB_ALLOW_WRITES"] === "true" ? "true" : "false",
             CRDB_MCP_ALLOW_PASSWORD_AUTH: "true",
             NO_COLOR: "1",
         } as Record<string, string>,
@@ -87,9 +90,7 @@ export async function closeMcpClient(): Promise<void> {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function extractText(
-    content: Array<{ type: string; text?: string }>,
-): string {
+function extractText(content: Array<{ type: string; text?: string }>): string {
     return content
         .filter((b) => b.type === "text")
         .map((b) => b.text ?? "")
