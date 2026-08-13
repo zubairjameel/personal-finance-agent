@@ -11,10 +11,12 @@ async function initFinancialSchema() {
         "utf-8",
     );
 
-    // Strip line comments before splitting
+    // Strip only full-line SQL comments (lines where -- is the first token).
+    // Do NOT strip inline comments (e.g. column definitions that contain --)
+    // because splitting on ; would corrupt those statements.
     const cleanSql = rawSql
         .split("\n")
-        .filter((line) => !line.trim().startsWith("--"))
+        .filter((line) => !/^\s*--/.test(line))
         .join("\n");
 
     const statements = cleanSql
