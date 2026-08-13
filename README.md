@@ -1,69 +1,119 @@
-# Personal Finance Agent
+# 🤖 Personal Finance Agent (OpenClaw-Style Autonomous Assistant)
 
-Personal finance agent that connects to your bank accounts via Plaid and keeps you up-to-date on your spendings, bills, and subscriptions.
+> Built for the **CockroachDB × AWS Hackathon 2026** (Deadline: August 18, 2026).
 
-The agent has discovery tools for your finances (for looking up account info/balance, transactions, subscriptions, and liabilities) as well as an analysis tool that computes stats for your spendings (daily avg, net cash flow, top merchant, etc).
+An autonomous, always-on AI personal finance agent inspired by the **OpenClaw agent architecture**. It connects to linked bank accounts via Plaid, uses **CockroachDB** as its long-term persistent memory, leverages **CockroachDB Managed MCP Server** for open-ended financial reasoning, runs via **Amazon Bedrock**, and alerts the user on **Telegram** only when spending anomalies occur or decisions require authorization.
 
-## Goals
+---
 
-The agent should use the OpenClaw agent style, where it runs autonomously on the background, managing the user's finances without the user's prompting. The user only needs to authorize crucial decisions. That being said, the user will get alerts if there are abnormalities in the spending patterns or transaction data. We can use Telegram as the communication line between user and agent for sake of simplicity.
+## 🎯 What Are We Building?
 
-- [ ] Implement background agent
-- [ ] Add memory (for the hackathon) using CockroachDB MCP server
-- [ ] Figure anomaly detection
-- [ ] Integrate Telegram
+Traditional finance apps require manual input, static budget rules, and constant checking. Our project builds a 24/7 autonomous financial truth-teller:
 
-## How to run
+1. **Autonomous Background Agent (OpenClaw Style)**:
+   Runs as an always-on background daemon. It periodically inspects new transactions in CockroachDB without waiting for the user to type a prompt.
 
-Before running the current code, you need the following env keys in `.env.local` (can also copy from `.env.example`):
+2. **CockroachDB Persistent Memory**:
+   Persists full bank accounts, transaction history, cursors, and analytical views (`spending_history`, `income_history`) in CockroachDB so the AI has long-term financial memory across sessions.
 
-```env
-ANTHROPIC_API_KEY=
-PLAID_CLIENT_ID=
-PLAID_SANDBOX_SECRET=
-PLAID_SANDBOX_ACCESS_TOKEN=
-DATABASE_URL=
+3. **CockroachDB Managed MCP Server (Open-Ended Reasoning)**:
+   Connects the AI directly to CockroachDB using Model Context Protocol (MCP). The AI writes unscripted SQL queries to answer any custom question like _"Why am I broke this month?"_ or _"What spending mistakes did I make?"_.
+
+4. **Amazon Bedrock AI Engine (AWS Requirement)**:
+   Powers LLM inference using Amazon Bedrock for fast, enterprise-grade reasoning.
+
+5. **Telegram Real-Time Alerts**:
+   Sends proactive push notifications directly to the user's phone on Telegram when spending anomalies (e.g. $500 impulse purchase, duplicate subscription) or authorization requests occur.
+
+---
+
+## 🏗️ System Architecture
+
 ```
-
-You need to create a Plaid sandbox and get the env keys from there. `DATABASE_URL` should point to a CockroachDB cluster (a local insecure instance works for development, e.g. `postgresql://root@localhost:26257/defaultdb?sslmode=disable`).
-
-To run the code:
-
-```bash
-npm install
-npm run db:init
-npm run start
+┌──────────────────┐       ┌──────────────────────┐       ┌────────────────────────┐
+│    Plaid API     │ ────> │ CockroachDB Cluster  │ ────> │  CockroachDB MCP       │
+│  (Live Accounts) │ Sync  │ (Persistent Memory)  │  SQL  │  Server (15 Tools)     │
+└──────────────────┘       └──────────────────────┘       └───────────┬────────────┘
+                                                                      │
+                                                                      ▼
+┌──────────────────┐       ┌──────────────────────┐       ┌────────────────────────┐
+│  Telegram Phone  │ <──── │  Background Daemon   │ <──── │   Amazon Bedrock /     │
+│   Push Alerts    │ Alert │  (OpenClaw Loop)     │ Infer │   Claude AI Engine     │
+└──────────────────┘       └──────────────────────┘       └────────────────────────┘
 ```
 
 ---
 
-## 🤖 CockroachDB MCP & Financial Analysis Feature
+## 🛠️ Tech Stack & Hackathon Requirements
 
-This feature lets the AI search CockroachDB directly using the CockroachDB MCP Server. The AI can write SQL queries to answer questions like *"What financial mistakes did I make this year?"*.
+| Requirement              | Technology                                                                         | Status         |
+| ------------------------ | ---------------------------------------------------------------------------------- | -------------- |
+| **CockroachDB Tool 1**   | **CockroachDB Managed MCP Server** (Native 15 SQL Tools)                           | ✅ Completed   |
+| **CockroachDB Tool 2**   | **CockroachDB Agent Skills** (`cockroachdb-sql`, `setting-up-local-cluster`, etc.) | ✅ Completed   |
+| **AWS Service 1**        | **Amazon Bedrock** (LLM Inference Engine)                                          | 🔄 In Progress |
+| **Storage & Memory**     | CockroachDB v25.4 (CCL Distributed SQL)                                            | ✅ Completed   |
+| **Financial API**        | Plaid API Sandbox (`transactionsSync`, `identityGet`, `liabilitiesGet`)            | ✅ Completed   |
+| **Multi-Channel Alerts** | Telegram Bot API                                                                   | 🔄 In Progress |
 
-### Step 1: Download MCP Server (Windows)
-Run this script once to download the CockroachDB MCP server binary:
+---
+
+## 🚀 Quick Start Guide for Team Members
+
+### Step 1: Clone & Install Dependencies
+
+```bash
+git clone https://github.com/zubairjameel/personal-finance-agent.git
+cd personal-finance-agent
+npm install
+```
+
+### Step 2: Download CockroachDB MCP Server Binary (Windows)
+
 ```powershell
 .\setup-mcp.ps1
 ```
 
-### Step 2: Setup Database & Add Sample Data
-Make sure your local CockroachDB is running, then run these two commands:
+### Step 3: Initialize CockroachDB Database & Seed Sample Data
+
+Make sure your local CockroachDB cluster is running (`postgresql://root@localhost:26257/defaultdb?sslmode=disable`), then run:
 
 ```bash
-# 1. Create financial tables and views in CockroachDB
+# 1. Create financial tables & analytical views in CockroachDB
 npm run db:init:financial
 
-# 2. Add sample transactions (food delivery, gym, tech) to the database
+# 2. Seed realistic sample transactions (food delivery, subscriptions, tech)
 npm run db:seed
 ```
 
-### Step 3: Run AI Financial Analysis
-Ask any financial question in plain English:
+### Step 4: Test CockroachDB MCP & Financial Analysis
+
+Run the MCP Server demo script to verify 15 native tools & SQL querying:
+
+```bash
+node bin/test-demo.mjs
+```
+
+Or ask any unscripted financial question using the dynamic AI analysis agent:
 
 ```bash
 npm run analysis -- "What financial mistakes did I make this year that explain why I'm broke?"
 ```
 
-> **Note**: Make sure your `ANTHROPIC_API_KEY` is added in `.env.local`.
+_(Make sure `ANTHROPIC_API_KEY` is set in `.env.local`)_
 
+---
+
+## 📁 Repository Structure
+
+```
+personal-finance-agent/
+├── bin/                       # Pre-built CockroachDB MCP binary & demo scripts
+├── src/
+│   ├── analysis/              # Open-ended financial reasoning agent (mistakes-agent.ts)
+│   ├── agent/                 # Serey's CLI agent & background loop components
+│   ├── db/                    # CockroachDB connection, schemas, init, & seed scripts
+│   └── mcp/                   # CockroachDB MCP client connector & Plaid sync engine
+├── setup-mcp.ps1              # One-shot MCP binary setup script
+├── package.json
+└── README.md
+```
