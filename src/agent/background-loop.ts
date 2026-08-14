@@ -1,119 +1,280 @@
 /**
  * src/agent/background-loop.ts
  *
- * OpenClaw-Style Autonomous Background Worker.
+ * OpenClaw-Style Autonomous Background Heartbeat Daemon.
  *
- * Runs autonomously in the background without user prompting.
- * 1. Syncs Plaid transactions to CockroachDB
- * 2. Runs the Anomaly Detection engine
- * 3. Queues alerts in CockroachDB `anomalies` table for Telegram bot delivery
+ * This is the always-on autonomous brain of the finance agent.
+ * It does NOT wait for user input — it wakes up on a heartbeat timer,
+ * checks CockroachDB for new financial anomalies, and queues alerts.
+ *
+ * Architecture (OpenClaw pattern):
+ *   ┌─────────────────────────────────────────────────┐
+ *   │              HEARTBEAT DAEMON                   │
+ *   │  Every N seconds:                               │
+ *   │  1. Sync Plaid → CockroachDB (if token set)     │
+ *   │  2. Run anomaly detection engine                 │
+ *   │  3. Write new anomalies → CockroachDB            │
+ *   │  4. Print alerts (Telegram bot picks these up)   │
+ *   └─────────────────────────────────────────────────┘
  *
  * Usage:
- *   npm run background             (runs once and exits - single pass)
- *   npm run background -- --watch  (runs continuously every 60 seconds)
+ *   npm run background               ← single pass, then exits
+ *   npm run background:watch         ← runs every 60s until Ctrl+C
+ *   npm run background:watch -- --interval=30  ← custom interval
  */
 
 import { config } from "dotenv";
 import { getOrCreateUser, pool } from "../db/index.ts";
 import { fullSync } from "../mcp/sync.ts";
-import {
-    detectAnomalies,
-    getPendingAnomalies,
-} from "./anomaly-detector.ts";
+import { detectAnomalies, getPendingAnomalies } from "./anomaly-detector.ts";
 
 config({ path: ".env.local" });
 
-const ansi = {
+// ─── ANSI colour helpers ────────────────────────────────────────────────────
+const c = {
     bold: (s: string) => `\x1b[1m${s}\x1b[0m`,
     dim: (s: string) => `\x1b[2m${s}\x1b[0m`,
     cyan: (s: string) => `\x1b[36m${s}\x1b[0m`,
     green: (s: string) => `\x1b[32m${s}\x1b[0m`,
     yellow: (s: string) => `\x1b[33m${s}\x1b[0m`,
     red: (s: string) => `\x1b[31m${s}\x1b[0m`,
+    blue: (s: string) => `\x1b[34m${s}\x1b[0m`,
 };
 
-/**
- * Execute one full cycle of the background agent loop.
- */
-export async function runBackgroundCycle(options: { verbose?: boolean } = {}) {
-    const { verbose = true } = options;
-    const timestamp = new Date().toLocaleTimeString();
-
-    if (verbose) {
-        console.log(`\n${ansi.bold(`[${timestamp}] 🔄 Running Autonomous Background Agent Cycle...`)}`);
-    }
-
-    const user = await getOrCreateUser();
-
-    // 1. Sync Plaid data if tokens exist
-    if (process.env["PLAID_SANDBOX_ACCESS_TOKEN"]) {
-        try {
-            if (verbose) process.stdout.write("  ⟳  Syncing Plaid bank transactions... ");
-            const syncRes = await fullSync(user.id);
-            if (verbose) console.log(ansi.green(`Done (${syncRes.accounts.length} account(s) synced).`));
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            if (verbose) console.log(ansi.yellow(`Skipped Plaid sync (${msg}).`));
-        }
-    } else {
-        if (verbose) console.log(ansi.dim("  ℹ  Plaid tokens not set — analyzing existing CockroachDB data."));
-    }
-
-    // 2. Run Anomaly Detection Engine
-    if (verbose) process.stdout.write("  🔍 Running Anomaly Detection engine... ");
-    const newAnomalies = await detectAnomalies(user.id);
-    if (verbose) console.log(ansi.green(`Done (${newAnomalies.length} new anomaly(ies) queued).`));
-
-    // 3. Print Pending Alerts
-    const pending = await getPendingAnomalies(user.id);
-
-    if (pending.length > 0) {
-        console.log(`\n  ${ansi.bold(`🚨 PENDING ALERTS QUEUED FOR TELEGRAM (${pending.length}):`)}`);
-        for (const a of pending) {
-            const color = a.severity === "CRITICAL" ? ansi.red : ansi.yellow;
-            console.log(`    • ${color(`[${a.severity}]`)} ${ansi.bold(a.title)}`);
-            console.log(`      ${ansi.dim(a.description)}`);
-        }
-    } else {
-        console.log(ansi.dim("  ✅ No pending anomalies — all financial metrics normal."));
-    }
-
-    if (verbose) {
-        console.log(ansi.dim("  Cycle complete.\n"));
-    }
+function log(msg: string) {
+    const ts = new Date().toLocaleTimeString();
+    console.log(`${c.dim(`[${ts}]`)} ${msg}`);
 }
 
-// ---------------------------------------------------------------------------
-// Runner
-// ---------------------------------------------------------------------------
+function banner(msg: string) {
+    console.log(c.cyan("━".repeat(60)));
+    console.log(c.bold(`  ${msg}`));
+    console.log(c.cyan("━".repeat(60)));
+}
+
+// ─── Heartbeat cycle ────────────────────────────────────────────────────────
+
+export interface CycleResult {
+    cycleNumber: number;
+    timestamp: string;
+    plaidSynced: boolean;
+    newAnomalies: number;
+    pendingAlerts: number;
+    errors: string[];
+}
+
+let cycleCount = 0;
+
+/**
+ * Run one full heartbeat cycle:
+ * 1. Sync Plaid bank data into CockroachDB
+ * 2. Run anomaly detection over stored transactions
+ * 3. Log pending alerts to console (Telegram bot will pick these up)
+ */
+export async function runHeartbeatCycle(): Promise<CycleResult> {
+    cycleCount++;
+    const result: CycleResult = {
+        cycleNumber: cycleCount,
+        timestamp: new Date().toISOString(),
+        plaidSynced: false,
+        newAnomalies: 0,
+        pendingAlerts: 0,
+        errors: [],
+    };
+
+    banner(`💓 HEARTBEAT #${cycleCount} — Autonomous Finance Agent`);
+
+    // ── Step 1: Get or create the agent's user identity ───────────────────
+    let userId: string;
+    try {
+        const user = await getOrCreateUser();
+        userId = user.id;
+        log(`${c.blue("👤")} Agent identity: ${c.dim(userId)}`);
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        result.errors.push(`Identity error: ${msg}`);
+        log(c.red(`❌ Failed to get user identity: ${msg}`));
+        return result;
+    }
+
+    // ── Step 2: Sync Plaid transactions → CockroachDB ─────────────────────
+    if (process.env["PLAID_SANDBOX_ACCESS_TOKEN"]) {
+        process.stdout.write(
+            `${c.dim(`[${new Date().toLocaleTimeString()}]`)} ${c.blue("🔄")} Syncing Plaid transactions → CockroachDB... `,
+        );
+        try {
+            const syncRes = await fullSync(userId);
+            const total = Object.values(syncRes.stats).reduce(
+                (sum, s) => sum + s.added + s.modified,
+                0,
+            );
+            console.log(
+                c.green(
+                    `✓ ${syncRes.accounts.length} account(s), ${total} transaction(s) synced`,
+                ),
+            );
+            result.plaidSynced = true;
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.log(c.yellow(`⚠ Skipped (${msg})`));
+            result.errors.push(`Plaid sync: ${msg}`);
+        }
+    } else {
+        log(
+            c.dim(
+                "ℹ  PLAID_SANDBOX_ACCESS_TOKEN not set — using existing CockroachDB data",
+            ),
+        );
+    }
+
+    // ── Step 3: Run Anomaly Detection engine ──────────────────────────────
+    process.stdout.write(
+        `${c.dim(`[${new Date().toLocaleTimeString()}]`)} ${c.blue("🔍")} Running Anomaly Detection engine... `,
+    );
+    try {
+        const newAnomalies = await detectAnomalies(userId);
+        result.newAnomalies = newAnomalies.length;
+        console.log(
+            c.green(
+                `✓ ${newAnomalies.length} new anomaly(ies) detected & saved`,
+            ),
+        );
+
+        if (newAnomalies.length > 0) {
+            console.log();
+            for (const a of newAnomalies) {
+                const severity =
+                    a.severity === "CRITICAL"
+                        ? c.red(`[${a.severity}]`)
+                        : a.severity === "HIGH"
+                          ? c.yellow(`[${a.severity}]`)
+                          : c.dim(`[${a.severity}]`);
+                log(`  🚨 ${severity} ${c.bold(a.title)}`);
+                log(`     ${c.dim(a.description)}`);
+            }
+        }
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.log(c.red(`❌ Failed (${msg})`));
+        result.errors.push(`Anomaly detection: ${msg}`);
+    }
+
+    // ── Step 4: Show all pending alerts (queued for Telegram delivery) ────
+    try {
+        const pending = await getPendingAnomalies(userId);
+        result.pendingAlerts = pending.length;
+
+        console.log();
+        if (pending.length > 0) {
+            log(
+                c.bold(
+                    `📬 ${pending.length} alert(s) queued in CockroachDB for Telegram delivery:`,
+                ),
+            );
+            for (const a of pending) {
+                const sev =
+                    a.severity === "CRITICAL"
+                        ? c.red(a.severity)
+                        : c.yellow(a.severity);
+                log(`  • [${sev}] ${a.title}`);
+            }
+        } else {
+            log(c.green("✅ All clear — no pending anomalies in queue"));
+        }
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        result.errors.push(`Pending alerts fetch: ${msg}`);
+    }
+
+    // ── Summary ────────────────────────────────────────────────────────────
+    console.log();
+    log(
+        c.dim(
+            `Cycle #${cycleCount} complete. ` +
+                `New: ${result.newAnomalies} | Pending: ${result.pendingAlerts} | ` +
+                `Errors: ${result.errors.length}`,
+        ),
+    );
+    console.log();
+
+    return result;
+}
+
+// ─── Graceful shutdown ──────────────────────────────────────────────────────
+
+function setupGracefulShutdown(intervalId?: ReturnType<typeof setInterval>) {
+    const shutdown = async (signal: string) => {
+        console.log(
+            `\n${c.yellow(`⚠  Received ${signal} — shutting down gracefully...`)}`,
+        );
+        if (intervalId) clearInterval(intervalId);
+        try {
+            await pool.end();
+            log(c.green("✓ Database pool closed"));
+        } catch {
+            // ignore
+        }
+        process.exit(0);
+    };
+
+    process.on("SIGINT", () => void shutdown("SIGINT"));
+    process.on("SIGTERM", () => void shutdown("SIGTERM"));
+}
+
+// ─── Main entrypoint ────────────────────────────────────────────────────────
 
 async function main() {
-    const isWatchMode = process.argv.includes("--watch");
-    const intervalSeconds = 60;
+    // Parse --interval=N flag (default 60 seconds)
+    const intervalArg = process.argv
+        .find((a) => a.startsWith("--interval="))
+        ?.split("=")[1];
+    const intervalSeconds = Math.max(10, Number(intervalArg ?? "60") || 60);
+    const isWatchMode =
+        process.argv.includes("--watch") ||
+        process.env["BACKGROUND_WATCH"] === "true";
 
-    console.log("============================================================");
-    console.log("🤖 OPENCLAW AUTONOMOUS BACKGROUND AGENT");
-    console.log("============================================================\n");
+    console.log();
+    banner("🤖 OPENCLAW AUTONOMOUS FINANCE AGENT — HEARTBEAT DAEMON");
+    console.log();
 
     if (isWatchMode) {
-        console.log(`Running in WATCH mode (cycling every ${intervalSeconds} seconds). Press Ctrl+C to exit.\n`);
-        
-        await runBackgroundCycle({ verbose: true });
-        
-        setInterval(async () => {
-            await runBackgroundCycle({ verbose: true });
-        }, intervalSeconds * 1000);
+        log(
+            c.cyan(
+                `Watch mode ON — heartbeat every ${intervalSeconds}s. Press Ctrl+C to stop.`,
+            ),
+        );
+        console.log();
+
+        // Run immediately on startup
+        await runHeartbeatCycle();
+
+        // Then repeat on interval
+        const intervalId = setInterval(
+            () => {
+                runHeartbeatCycle().catch((err) => {
+                    console.error(
+                        c.red("💥 Unhandled error in heartbeat cycle:"),
+                        err,
+                    );
+                });
+            },
+            intervalSeconds * 1000,
+        );
+
+        setupGracefulShutdown(intervalId);
+        // Keep process alive
     } else {
-        await runBackgroundCycle({ verbose: true });
+        // Single pass mode
+        log(c.dim("Single-pass mode. Use --watch for continuous heartbeat."));
+        console.log();
+        await runHeartbeatCycle();
         await pool.end();
         process.exit(0);
     }
 }
 
-// Run if called directly
-if (process.argv[1]?.endsWith("background-loop.ts")) {
-    main().catch((err) => {
-        console.error("Fatal error in background loop:", err);
-        process.exit(1);
-    });
-}
+// ── Always run — this file is always invoked directly via npm scripts ────────
+main().catch((err) => {
+    console.error(c.red("💥 Fatal error in background daemon:"), err);
+    pool.end().finally(() => process.exit(1));
+});

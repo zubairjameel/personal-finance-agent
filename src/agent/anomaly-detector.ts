@@ -19,7 +19,11 @@ export interface DetectedAnomaly {
     id?: string;
     userId: string;
     transactionId?: string;
-    type: "HIGH_SINGLE_PURCHASE" | "SPENDING_SPIKE" | "DUPLICATE_CHARGE" | "RECURRING_SUBSCRIPTION";
+    type:
+        | "HIGH_SINGLE_PURCHASE"
+        | "SPENDING_SPIKE"
+        | "DUPLICATE_CHARGE"
+        | "RECURRING_SUBSCRIPTION";
     severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
     title: string;
     description: string;
@@ -32,7 +36,9 @@ export interface DetectedAnomaly {
  * Detect spending anomalies across transactions in CockroachDB for a given user.
  * Writes newly discovered anomalies into the `anomalies` table.
  */
-export async function detectAnomalies(userId: string): Promise<DetectedAnomaly[]> {
+export async function detectAnomalies(
+    userId: string,
+): Promise<DetectedAnomaly[]> {
     const detected: DetectedAnomaly[] = [];
 
     // 1. High Single Purchase (>= $300)
@@ -47,7 +53,7 @@ export async function detectAnomalies(userId: string): Promise<DetectedAnomaly[]
          FROM spending_history
          WHERE user_id = $1 AND amount >= 300.00
          ORDER BY amount DESC`,
-        [userId]
+        [userId],
     );
 
     for (const txn of highPurchases.rows) {
@@ -77,7 +83,7 @@ export async function detectAnomalies(userId: string): Promise<DetectedAnomaly[]
          WHERE user_id = $1 AND merchant_name IS NOT NULL
          GROUP BY merchant_name, amount, date
          HAVING count(*) > 1`,
-        [userId]
+        [userId],
     );
 
     for (const dup of duplicates.rows) {
@@ -102,7 +108,7 @@ export async function detectAnomalies(userId: string): Promise<DetectedAnomaly[]
          FROM spending_history
          WHERE user_id = $1
          GROUP BY category`,
-        [userId]
+        [userId],
     );
 
     const categoryAvgMap = new Map<string, number>();
@@ -121,7 +127,7 @@ export async function detectAnomalies(userId: string): Promise<DetectedAnomaly[]
         `SELECT id, category, amount, merchant_name, transaction_name, date
          FROM spending_history
          WHERE user_id = $1`,
-        [userId]
+        [userId],
     );
 
     for (const txn of spikes.rows) {
@@ -142,39 +148,43 @@ export async function detectAnomalies(userId: string): Promise<DetectedAnomaly[]
         }
     }
 
-    // 4. Save newly detected anomalies to DB (ignore duplicates via status/title check)
+    // 4. Save newly detected anomalies to DB — batch duplicate check to avoid N+1
     const insertedAnomalies: DetectedAnomaly[] = [];
+    if (detected.length === 0) return insertedAnomalies;
+
+    // Fetch all existing anomaly titles for this user in one query
+    const existingRes = await pool.query<{ title: string; transaction_id: string | null }>(
+        `SELECT title, transaction_id FROM anomalies WHERE user_id = $1`,
+        [userId],
+    );
+    const existingKeys = new Set(
+        existingRes.rows.map((r) => `${r.title}::${r.transaction_id ?? "null"}`),
+    );
 
     for (const anomaly of detected) {
-        const existing = await pool.query(
-            `SELECT id FROM anomalies 
-             WHERE user_id = $1 AND title = $2 AND (transaction_id = $3 OR transaction_id IS NULL)`,
-            [userId, anomaly.title, anomaly.transactionId ?? null]
-        );
+        const key = `${anomaly.title}::${anomaly.transactionId ?? "null"}`;
+        if (existingKeys.has(key)) continue; // already recorded, skip
 
-        if (existing.rows.length === 0) {
-            const res = await pool.query<{ id: string }>(
-                `INSERT INTO anomalies
-                   (user_id, transaction_id, type, severity, title, description, amount, merchant_name, status)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
-                 RETURNING id`,
-                [
-                    anomaly.userId,
-                    anomaly.transactionId ?? null,
-                    anomaly.type,
-                    anomaly.severity,
-                    anomaly.title,
-                    anomaly.description,
-                    anomaly.amount,
-                    anomaly.merchantName,
-                ]
-            );
-            const row = res.rows[0];
-            if (row) {
-                anomaly.id = row.id;
-            }
-            insertedAnomalies.push(anomaly);
-        }
+        const res = await pool.query<{ id: string }>(
+            `INSERT INTO anomalies
+               (user_id, transaction_id, type, severity, title, description, amount, merchant_name, status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
+             RETURNING id`,
+            [
+                anomaly.userId,
+                anomaly.transactionId ?? null,
+                anomaly.type,
+                anomaly.severity,
+                anomaly.title,
+                anomaly.description,
+                anomaly.amount,
+                anomaly.merchantName,
+            ],
+        );
+        const row = res.rows[0];
+        if (row) anomaly.id = row.id;
+        existingKeys.add(key); // prevent duplicates within same cycle
+        insertedAnomalies.push(anomaly);
     }
 
     return insertedAnomalies;
@@ -184,13 +194,15 @@ export async function detectAnomalies(userId: string): Promise<DetectedAnomaly[]
  * Fetch pending anomalies from CockroachDB queued for notification.
  * Used by the Telegram bot or background worker.
  */
-export async function getPendingAnomalies(userId: string): Promise<DetectedAnomaly[]> {
+export async function getPendingAnomalies(
+    userId: string,
+): Promise<DetectedAnomaly[]> {
     const res = await pool.query<DetectedAnomaly>(
         `SELECT id, user_id AS "userId", transaction_id AS "transactionId", type, severity, title, description, amount, merchant_name AS "merchantName", status
          FROM anomalies
          WHERE user_id = $1 AND status = 'pending'
          ORDER BY created_at DESC`,
-        [userId]
+        [userId],
     );
     return res.rows;
 }
@@ -198,10 +210,12 @@ export async function getPendingAnomalies(userId: string): Promise<DetectedAnoma
 /**
  * Mark anomalies as notified after Telegram alert is sent.
  */
-export async function markAnomaliesNotified(anomalyIds: string[]): Promise<void> {
+export async function markAnomaliesNotified(
+    anomalyIds: string[],
+): Promise<void> {
     if (anomalyIds.length === 0) return;
     await pool.query(
         `UPDATE anomalies SET status = 'notified' WHERE id = ANY($1::uuid[])`,
-        [anomalyIds]
+        [anomalyIds],
     );
 }
