@@ -11,7 +11,9 @@
         "db:sync": "node src/mcp/sync.ts",
         "analysis": "node src/analysis/mistakes-agent.ts",
         "background": "node src/agent/background-loop.ts",
-        "background:watch": "node src/agent/background-loop.ts --watch"
+        "background:watch": "node src/agent/background-loop.ts --watch",
+        "plaid:setup": "node bin/plaid-setup.mjs",
+        "daemon": "node bin/start-daemon.mjs --watch"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
@@ -25,8 +27,10 @@
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.115.0",
+        "@google/generative-ai": "^0.24.1",
         "@modelcontextprotocol/sdk": "^1.30.0",
         "dotenv": "^17.4.2",
+        "groq-sdk": "^1.5.0",
         "pg": "^8.23.0",
         "plaid": "^45.0.0",
         "zod": "^4.4.3"

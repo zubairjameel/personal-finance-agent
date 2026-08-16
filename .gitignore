@@ -8,3 +8,4 @@ dist/
 cockroachdb-mcp-server.zip
 bin/cockroachdb-mcp-server.exe
 bin/LICENSE
+cockroach-data/
