@@ -211,13 +211,14 @@ async function main() {
 
     const user = await getOrCreateUser();
 
-    const answer = await analyzeFinancialQuestion(question, {
-        verbose: true,
-        syncFirst: false, // Use existing CockroachDB data
-        userId: user.id,
-    });
+    // Run using Kadmus multi-provider MCP reasoning agent
+    const { runMcpAgent } = await import("../ai/mcp-agent.ts");
+    const result = await runMcpAgent(question, { verbose: true });
 
-    console.log(answer);
+    console.log("\n" + "═".repeat(60));
+    console.log(`\n🏛️  KADMUS FINANCIAL DIAGNOSIS (Powered by ${result.provider} / ${result.model}):\n`);
+    console.log(result.answer);
+    console.log("\n" + "═".repeat(60));
 
     await closeMcpClient();
     await pool.end();

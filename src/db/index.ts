@@ -3,10 +3,56 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import { Pool } from "pg";
+import net from "net";
+import { spawn } from "child_process";
+import { existsSync } from "fs";
+import os from "os";
 
 config({ path: ".env.local" });
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function checkPort(port = 26257): Promise<boolean> {
+    return new Promise((resolve) => {
+        const s = new net.Socket();
+        s.setTimeout(500);
+        s.on("connect", () => { s.destroy(); resolve(true); });
+        s.on("timeout", () => { s.destroy(); resolve(false); });
+        s.on("error", () => resolve(false));
+        s.connect(port, "127.0.0.1");
+    });
+}
+
+export async function ensureCockroachRunning(): Promise<void> {
+    const isLocal = (process.env["DATABASE_URL"] ?? "").includes("localhost") || 
+                    (process.env["DATABASE_URL"] ?? "").includes("127.0.0.1");
+    if (!isLocal) return;
+
+    if (await checkPort(26257)) return;
+
+    const candidates = [
+        path.join(os.homedir(), ".cockroachdb", "bin", "cockroach.exe"),
+        path.join(os.homedir(), ".cockroachdb", "bin", "cockroach"),
+        "D:\\cockroach-v24.3.11.windows-6.2-amd64\\cockroach-v24.3.11.windows-6.2-amd64\\cockroach.exe",
+        "cockroach",
+    ];
+
+    const found = candidates.find((c) => existsSync(c));
+    if (!found) return;
+
+    spawn(found, [
+        "start-single-node",
+        "--insecure",
+        "--listen-addr=localhost:26257",
+        "--http-addr=localhost:8080",
+        "--store=cockroach-data",
+    ], { detached: true, stdio: "ignore" }).unref();
+
+    for (let i = 0; i < 25; i++) {
+        if (await checkPort(26257)) return;
+        await new Promise((r) => setTimeout(r, 400));
+    }
+}
 
 export const pool = new Pool({
     connectionString: process.env["DATABASE_URL"],
@@ -14,6 +60,7 @@ export const pool = new Pool({
 });
 
 export async function initSchema() {
+    await ensureCockroachRunning();
     const schema = await readFile(path.join(dirname, "schema.sql"), "utf-8");
     await pool.query(schema);
 }
@@ -83,7 +130,10 @@ export interface User {
 }
 
 export async function getOrCreateUser(): Promise<User> {
-    const existing = await pool.query<User>("SELECT id FROM users ORDER BY id ASC LIMIT 1");
+    await ensureCockroachRunning();
+    const existing = await pool.query<User>(
+        "SELECT id FROM users ORDER BY id ASC LIMIT 1",
+    );
     if (existing.rows[0]) {
         return existing.rows[0];
     }

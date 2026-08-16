@@ -36,12 +36,16 @@ function binaryPath(): string {
     return path.join(projectRoot, "bin", "cockroachdb-mcp-server.exe");
 }
 
+import { ensureCockroachRunning } from "../db/index.ts";
+
 /**
  * Lazily start the MCP server subprocess and return a connected client.
  * Reuses the existing process within the same Node.js process lifetime.
  */
 export async function getMcpClient(): Promise<Client> {
     if (_client) return _client;
+
+    await ensureCockroachRunning();
 
     const dbUrl = process.env["DATABASE_URL"];
     if (!dbUrl) {
@@ -113,6 +117,43 @@ export async function getMcpToolsForAnthropic(): Promise<Anthropic.Tool[]> {
     }));
 }
 
+function sanitizeSchemaForGemini(raw: unknown): Record<string, unknown> {
+    if (!raw || typeof raw !== "object") {
+        return { type: "OBJECT", properties: {} };
+    }
+    const r = raw as Record<string, unknown>;
+    const clean: Record<string, unknown> = {};
+
+    if (typeof r["type"] === "string") {
+        clean["type"] = (r["type"] as string).toUpperCase();
+    } else if (Array.isArray(r["type"])) {
+        const types = r["type"] as string[];
+        const main = types.find((t) => t !== "null") ?? "string";
+        clean["type"] = main.toUpperCase();
+        clean["nullable"] = true;
+    } else {
+        clean["type"] = "OBJECT";
+    }
+
+    if (r["description"]) clean["description"] = r["description"];
+    if (Array.isArray(r["required"])) clean["required"] = r["required"];
+    if (Array.isArray(r["enum"])) clean["enum"] = r["enum"];
+
+    if (r["properties"] && typeof r["properties"] === "object") {
+        const props: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(r["properties"] as Record<string, unknown>)) {
+            props[k] = sanitizeSchemaForGemini(v);
+        }
+        clean["properties"] = props;
+    }
+
+    if (r["items"] && typeof r["items"] === "object") {
+        clean["items"] = sanitizeSchemaForGemini(r["items"]);
+    }
+
+    return clean;
+}
+
 /**
  * Fetch all MCP tools and convert to OpenAI-compatible format (used by Groq).
  * Groq uses the same function calling format as OpenAI.
@@ -157,10 +198,7 @@ export async function getMcpToolsForGemini(): Promise<
     return tools.map((t) => ({
         name: t.name,
         description: t.description ?? "",
-        parameters: (t.inputSchema as Record<string, unknown>) ?? {
-            type: "object",
-            properties: {},
-        },
+        parameters: sanitizeSchemaForGemini(t.inputSchema),
     }));
 }
 
