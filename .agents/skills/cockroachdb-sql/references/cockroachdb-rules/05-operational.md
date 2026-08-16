@@ -3,6 +3,7 @@
 ## Admin Queries
 
 ### SHOW Commands
+
 ```sql
 -- Table information
 SHOW TABLES;
@@ -48,6 +49,7 @@ SHOW EXPERIMENTAL_REPLICA LOCALITIES FROM TABLE table_name;
 ```
 
 ### Database Management
+
 ```sql
 -- Create/Drop database
 CREATE DATABASE IF NOT EXISTS mydb;
@@ -67,6 +69,7 @@ SELECT pg_size_pretty(pg_database_size('mydb'));
 ```
 
 ### User and Role Management
+
 ```sql
 -- Create users
 CREATE USER username WITH PASSWORD 'password';
@@ -101,6 +104,7 @@ SHOW GRANTS FOR username;
 ## EXPLAIN Plans
 
 ### Basic Explain
+
 ```sql
 -- Basic explain
 EXPLAIN SELECT * FROM users WHERE email = 'test@example.com';
@@ -125,6 +129,7 @@ WHERE u.created_at > '2024-01-01';
 ```
 
 ### Reading Explain Output
+
 ```sql
 -- Look for these warning signs:
 -- • "full scan" - Missing index
@@ -141,6 +146,7 @@ EXPLAIN ANALYZE SELECT * FROM large_table WHERE unindexed_column = 'value';
 ## Backup and Restore (Enterprise)
 
 ### Backup Operations
+
 ```sql
 -- Full database backup
 BACKUP DATABASE mydb INTO 'nodelocal://1/backup';
@@ -171,6 +177,7 @@ CREATE SCHEDULE daily_backup
 ```
 
 ### Restore Operations
+
 ```sql
 -- Restore entire database
 RESTORE DATABASE mydb FROM 's3://bucket/backup';
@@ -198,6 +205,7 @@ RESTORE DATABASE mydb FROM 's3://bucket/backup'
 ```
 
 ### Backup Management
+
 ```sql
 -- Show backup contents
 SHOW BACKUP FROM 's3://bucket/backup';
@@ -223,6 +231,7 @@ DROP SCHEDULE 123456;
 ## Changefeeds (Enterprise CDC)
 
 ### Create Changefeeds
+
 ```sql
 -- Basic changefeed to Kafka
 CREATE CHANGEFEED FOR TABLE users, orders
@@ -259,6 +268,7 @@ CREATE CHANGEFEED FOR TABLE users
 ```
 
 ### Manage Changefeeds
+
 ```sql
 -- Show changefeed jobs
 SHOW CHANGEFEED JOBS;
@@ -280,6 +290,7 @@ CANCEL JOB 123456789;
 ## Monitoring and Diagnostics
 
 ### Performance Monitoring
+
 ```sql
 -- Active queries
 SELECT query, start, application_name
@@ -310,6 +321,7 @@ SELECT * FROM crdb_internal.cluster_sessions;
 ```
 
 ### System Tables
+
 ```sql
 -- Node status
 SELECT * FROM crdb_internal.kv_node_status;
@@ -333,6 +345,7 @@ SELECT * FROM crdb_internal.statement_statistics;
 ```
 
 ### Cluster Health
+
 ```sql
 -- Check cluster version
 SELECT version();
@@ -360,6 +373,7 @@ WHERE array_length(replicas, 1) < 3;
 ## Maintenance Operations
 
 ### Statistics Management
+
 ```sql
 -- Create table statistics
 CREATE STATISTICS stats_name ON column1, column2 FROM table_name;
@@ -374,6 +388,7 @@ ANALYZE table_name;
 ```
 
 ### Compaction
+
 ```sql
 -- Manual compaction (use carefully)
 ALTER TABLE table_name EXPERIMENTAL_RELOCATE
@@ -384,6 +399,7 @@ ALTER TABLE table_name SCATTER;
 ```
 
 ### Schema Changes
+
 ```sql
 -- Online schema changes (non-blocking)
 ALTER TABLE users ADD COLUMN new_field STRING DEFAULT '';

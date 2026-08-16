@@ -3,6 +3,7 @@
 ## Time Travel Queries (AS OF SYSTEM TIME)
 
 ### Historical Data Access
+
 ```sql
 -- Query data from 1 hour ago
 SELECT * FROM orders AS OF SYSTEM TIME '-1h';
@@ -36,6 +37,7 @@ EXPORT INTO CSV 'path' FROM SELECT * FROM table
 ## Window Functions
 
 ### Ranking and Numbering
+
 ```sql
 -- Row numbering
 SELECT
@@ -60,6 +62,7 @@ FROM products;
 ```
 
 ### Analytics
+
 ```sql
 -- Running totals
 SELECT
@@ -96,6 +99,7 @@ FROM user_sessions;
 ## JSON Operations
 
 ### JSON Operators
+
 ```sql
 data JSONB NOT NULL DEFAULT '{}'::JSONB
 
@@ -124,6 +128,7 @@ SELECT * FROM table WHERE '{"status": "active"}' <@ data;
 ```
 
 ### JSON Manipulation
+
 ```sql
 -- Update JSON
 UPDATE table SET data = jsonb_set(data, '{path,to,field}', '"new_value"');
@@ -146,6 +151,7 @@ SELECT jsonb_build_object(
 ```
 
 ### JSON Indexing
+
 ```sql
 -- General inverted index
 CREATE INVERTED INDEX ON table(json_column);
@@ -160,6 +166,7 @@ CREATE INDEX ON table((json_column->'user'->>'id'));
 ## Array Operations
 
 ### Array Basics
+
 ```sql
 -- Array column definition
 tags STRING[]              -- Array of strings
@@ -177,6 +184,7 @@ SELECT * FROM posts WHERE tags && ARRAY['sql', 'nosql']; -- Overlap
 ```
 
 ### Array Functions
+
 ```sql
 -- Array length
 SELECT array_length(tags, 1) FROM posts;
@@ -200,6 +208,7 @@ SELECT string_to_array('a,b,c', ',');
 ```
 
 ### Array with ORDINALITY
+
 ```sql
 -- Add row numbers to array elements
 SELECT * FROM unnest(ARRAY['a', 'b', 'c']) WITH ORDINALITY;
@@ -217,6 +226,7 @@ FROM jsonb_array_elements_text('["a","b","c"]'::JSONB) WITH ORDINALITY
 ## Common Table Expressions (CTEs)
 
 ### Basic CTE
+
 ```sql
 WITH user_stats AS (
   SELECT user_id, COUNT(*) as order_count, SUM(total) as total_spent
@@ -229,6 +239,7 @@ JOIN user_stats s ON u.id = s.user_id;
 ```
 
 ### Multiple CTEs
+
 ```sql
 WITH
 recent_orders AS (
@@ -248,6 +259,7 @@ JOIN top_users t ON u.id = t.user_id;
 ```
 
 ### Recursive CTE
+
 ```sql
 WITH RECURSIVE category_tree AS (
   -- Base case: root categories
@@ -269,6 +281,7 @@ SELECT * FROM category_tree ORDER BY level, name;
 ```
 
 ### Materialized CTEs
+
 ```sql
 -- Force materialization (prevent optimization)
 WITH materialized_cte AS MATERIALIZED (
@@ -287,6 +300,7 @@ SELECT * FROM not_materialized;
 ## Special Operators
 
 ### Text Search
+
 ```sql
 -- Text search match
 SELECT * FROM documents
@@ -304,6 +318,7 @@ ORDER BY rank DESC;
 ```
 
 ### Spatial/Geometric
+
 ```sql
 -- Distance between points
 SELECT location1 <-> location2 as distance FROM places;
@@ -317,6 +332,7 @@ SELECT * FROM zones WHERE polygon @> point;
 ```
 
 ### Network Operations
+
 ```sql
 -- IP address containment
 SELECT * FROM connections WHERE ip_address << '192.168.0.0/16';
@@ -327,6 +343,7 @@ SELECT * FROM networks WHERE network >>= '10.0.0.0/24';
 ```
 
 ### Vector Operations (AI/ML)
+
 ```sql
 -- Cosine similarity (normalized)
 SELECT * FROM documents
@@ -347,6 +364,7 @@ LIMIT 10;
 ## System Functions
 
 ### CockroachDB-Specific
+
 ```sql
 -- Generate UUID
 SELECT gen_random_uuid();
@@ -368,6 +386,7 @@ SELECT pg_size_pretty(pg_database_size('mydb'));
 ```
 
 ### Session Information
+
 ```sql
 -- Current database
 SELECT current_database();
@@ -388,6 +407,7 @@ SELECT session_user();
 ## Type Casting
 
 ### Casting Syntax
+
 ```sql
 -- PostgreSQL-style (preferred)
 expression::type
@@ -407,6 +427,7 @@ now():::TIMESTAMPTZ
 ```
 
 ### Common Conversions
+
 ```sql
 -- String to numeric
 '123'::INT8
@@ -429,6 +450,7 @@ row_to_json(table_name)
 ## Common Query Patterns
 
 ### Find Recent Items
+
 ```sql
 -- Basic recent query
 SELECT * FROM items
@@ -442,6 +464,7 @@ WHERE created_at > now() - INTERVAL '7 days';
 ```
 
 ### Existence Checks
+
 ```sql
 -- Efficient existence check
 SELECT EXISTS(
@@ -455,6 +478,7 @@ SELECT COUNT(*) > 0 as has_records FROM (
 ```
 
 ### Get or Create
+
 ```sql
 -- Insert if not exists, return existing or new
 WITH ins AS (
@@ -472,6 +496,7 @@ LIMIT 1;
 ### Pagination
 
 #### Offset Pagination
+
 ```sql
 -- Simple but inefficient for large offsets
 SELECT * FROM posts
@@ -480,6 +505,7 @@ LIMIT 20 OFFSET 40;
 ```
 
 #### Keyset Pagination
+
 ```sql
 -- Efficient for large datasets
 -- First page
@@ -495,6 +521,7 @@ LIMIT 20;
 ```
 
 ### Bulk Operations
+
 ```sql
 -- Bulk insert with returning
 INSERT INTO items (id, name, price) VALUES
@@ -523,6 +550,7 @@ WHERE id IN (
 ```
 
 ### Hierarchical Data
+
 ```sql
 -- Recursive CTE for tree structures
 WITH RECURSIVE tree AS (
@@ -545,6 +573,7 @@ SELECT * FROM tree ORDER BY path;
 ```
 
 ### Deduplication
+
 ```sql
 -- Remove duplicates keeping newest
 DELETE FROM events

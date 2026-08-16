@@ -3,6 +3,7 @@
 ## Performance Patterns
 
 ### Query Hints
+
 ```sql
 -- Force index usage
 SELECT * FROM orders@orders_user_id_idx WHERE user_id = 1;
@@ -25,6 +26,7 @@ CREATE STATISTICS stats_name ON column FROM table;
 ```
 
 ### Range Operations
+
 ```sql
 -- Split ranges at specific values (admin operation)
 ALTER TABLE orders SPLIT AT VALUES (1000), (2000), (3000);
@@ -45,6 +47,7 @@ ALTER TABLE orders SCATTER FROM (1) TO (1000);
 ```
 
 ### Zone Configuration
+
 ```sql
 -- Configure replication
 ALTER TABLE important_data CONFIGURE ZONE USING
@@ -65,6 +68,7 @@ ALTER TABLE large_table CONFIGURE ZONE USING
 ### Query Optimization Techniques
 
 #### Partial Indexes
+
 ```sql
 -- Index only active records
 CREATE INDEX idx_active_users ON users (email)
@@ -78,6 +82,7 @@ WHERE created_at > '2024-01-01';
 ## Common Anti-Patterns
 
 ### DON'T Use These
+
 ```sql
 -- AUTO_INCREMENT (not supported)
 id INT AUTO_INCREMENT  -- ❌ Will fail
@@ -101,6 +106,7 @@ ROLLBACK PREPARED 'tx_id';    -- ❌ Use outbox pattern for cross-DB writes inst
 ```
 
 ### DO Use These Instead
+
 ```sql
 -- Safe deletion
 DELETE FROM table WHERE condition;  -- ✅
@@ -133,20 +139,24 @@ CREATE CHANGEFEED FOR TABLE outbox_events
 ## Performance Best Practices
 
 ### 1. Index Strategy
+
 - Create indexes for WHERE, JOIN, and ORDER BY columns
 - Use hash-sharded indexes for sequential data
 - Monitor unused indexes and drop them
 
 ### 2. Data Distribution
+
 - Consider hash-sharded indexes for time-series data
 - Split ranges manually for known access patterns
 - Use zone configs for geo-distribution
 
 ### 3. Connection Management
+
 - Use connection pooling
 - Set appropriate statement timeout
 
 ### 5. Monitoring
+
 ```sql
 -- Check slow queries
 SELECT * FROM crdb_internal.cluster_queries
@@ -168,6 +178,7 @@ EXPLAIN ANALYZE SELECT ...;
 ## Query Plan Analysis
 
 ### Understanding EXPLAIN
+
 ```sql
 -- Basic explain
 EXPLAIN SELECT * FROM users WHERE email = 'test@example.com';
@@ -185,6 +196,7 @@ EXPLAIN SELECT * FROM large_table;
 ```
 
 ### Common Plan Issues
+
 1. **Full table scans** - Add appropriate indexes
 2. **Hash joins on large tables** - Consider merge joins
 3. **High network latency** - Use zone configs
@@ -194,12 +206,14 @@ EXPLAIN SELECT * FROM large_table;
 ## Hardware and Deployment
 
 ### Resource Recommendations
+
 - **CPU**: 4-8 cores per node minimum
 - **Memory**: 8-16 GB per node minimum
 - **Storage**: SSDs strongly recommended
 - **Network**: Low latency between nodes
 
 ### Cluster Sizing
+
 ```sql
 -- Check cluster capacity
 SELECT * FROM crdb_internal.kv_node_status;

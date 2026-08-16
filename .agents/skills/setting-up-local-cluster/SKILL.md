@@ -29,13 +29,13 @@ Detect the OS and architecture, then download the appropriate binary.
 
 Base URL: `https://binaries.cockroachdb.com/`
 
-| OS | Architecture | Filename Pattern |
-|----|-------------|-----------------|
-| Linux | Intel (amd64) | `cockroach-v{VERSION}.linux-amd64.tgz` |
-| Linux | ARM (arm64) | `cockroach-v{VERSION}.linux-arm64.tgz` |
-| macOS | Intel (amd64) | `cockroach-v{VERSION}.darwin-10.9-amd64.tgz` |
-| macOS | Apple Silicon (arm64) | `cockroach-v{VERSION}.darwin-11.0-arm64.tgz` |
-| Windows | Intel (amd64) | `cockroach-v{VERSION}.windows-6.2-amd64.zip` |
+| OS      | Architecture          | Filename Pattern                             |
+| ------- | --------------------- | -------------------------------------------- |
+| Linux   | Intel (amd64)         | `cockroach-v{VERSION}.linux-amd64.tgz`       |
+| Linux   | ARM (arm64)           | `cockroach-v{VERSION}.linux-arm64.tgz`       |
+| macOS   | Intel (amd64)         | `cockroach-v{VERSION}.darwin-10.9-amd64.tgz` |
+| macOS   | Apple Silicon (arm64) | `cockroach-v{VERSION}.darwin-11.0-arm64.tgz` |
+| Windows | Intel (amd64)         | `cockroach-v{VERSION}.windows-6.2-amd64.zip` |
 
 Replace `{VERSION}` with the desired release (e.g., `25.4.9`). See [CockroachDB Releases](https://www.cockroachlabs.com/docs/releases/) for the latest GA version.
 
@@ -110,12 +110,12 @@ cockroach sql --insecure --host=localhost:26257 \
 
 ## Connection Details
 
-| Property | Value |
-|----------|-------|
-| SQL URL | `postgresql://root@localhost:26257/defaultdb?sslmode=disable` |
-| DB Console | `http://localhost:8080` |
-| User | `root` (no password in insecure mode) |
-| Database | `defaultdb` |
+| Property   | Value                                                         |
+| ---------- | ------------------------------------------------------------- |
+| SQL URL    | `postgresql://root@localhost:26257/defaultdb?sslmode=disable` |
+| DB Console | `http://localhost:8080`                                       |
+| User       | `root` (no password in insecure mode)                         |
+| Database   | `defaultdb`                                                   |
 
 ### Environment Variables for MCP Toolbox
 
@@ -153,16 +153,16 @@ For environments without internet access:
 
 ## What a 3-Node Cluster Enables
 
-| Capability | Single Node | 3-Node |
-|-----------|-------------|--------|
-| SQL execution | Yes | Yes |
-| Replication (num_replicas=3) | No | Yes |
-| Range distribution | No | Yes |
-| Leaseholder balancing | No | Yes |
-| Node failure simulation | No | Yes |
-| `SHOW RANGES` with real distribution | No | Yes |
-| Survival goals (`SURVIVE ZONE FAILURE`) | No | Yes |
-| Contention between nodes | No | Yes |
+| Capability                              | Single Node | 3-Node |
+| --------------------------------------- | ----------- | ------ |
+| SQL execution                           | Yes         | Yes    |
+| Replication (num_replicas=3)            | No          | Yes    |
+| Range distribution                      | No          | Yes    |
+| Leaseholder balancing                   | No          | Yes    |
+| Node failure simulation                 | No          | Yes    |
+| `SHOW RANGES` with real distribution    | No          | Yes    |
+| Survival goals (`SURVIVE ZONE FAILURE`) | No          | Yes    |
+| Contention between nodes                | No          | Yes    |
 
 ## Safety Considerations
 

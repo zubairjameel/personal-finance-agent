@@ -1,23 +1,23 @@
 {
-  "version": 1,
-  "skills": {
-    "cockroachdb-sql": {
-      "source": "cockroachlabs/cockroachdb-skills",
-      "sourceType": "github",
-      "skillPath": "skills/cockroachdb-query-and-schema-design/cockroachdb-sql/SKILL.md",
-      "computedHash": "9b5a5d981d6a87240f1f3055075c71dacf274b29b8b9a039cd9dfb3dbcf308e1"
-    },
-    "designing-application-transactions": {
-      "source": "cockroachlabs/cockroachdb-skills",
-      "sourceType": "github",
-      "skillPath": "skills/cockroachdb-application-development/designing-application-transactions/SKILL.md",
-      "computedHash": "ec22ca0448e2b34578bf141f182b6150a3ad773fde39ab0ae797ed4958012b82"
-    },
-    "setting-up-local-cluster": {
-      "source": "cockroachlabs/cockroachdb-skills",
-      "sourceType": "github",
-      "skillPath": "skills/cockroachdb-onboarding-and-migrations/setting-up-local-cluster/SKILL.md",
-      "computedHash": "d05b148fe8ecfbea8577710383ce1f80312a97434c5d74bce8f381336034cf1a"
+    "version": 1,
+    "skills": {
+        "cockroachdb-sql": {
+            "source": "cockroachlabs/cockroachdb-skills",
+            "sourceType": "github",
+            "skillPath": "skills/cockroachdb-query-and-schema-design/cockroachdb-sql/SKILL.md",
+            "computedHash": "9b5a5d981d6a87240f1f3055075c71dacf274b29b8b9a039cd9dfb3dbcf308e1"
+        },
+        "designing-application-transactions": {
+            "source": "cockroachlabs/cockroachdb-skills",
+            "sourceType": "github",
+            "skillPath": "skills/cockroachdb-application-development/designing-application-transactions/SKILL.md",
+            "computedHash": "ec22ca0448e2b34578bf141f182b6150a3ad773fde39ab0ae797ed4958012b82"
+        },
+        "setting-up-local-cluster": {
+            "source": "cockroachlabs/cockroachdb-skills",
+            "sourceType": "github",
+            "skillPath": "skills/cockroachdb-onboarding-and-migrations/setting-up-local-cluster/SKILL.md",
+            "computedHash": "d05b148fe8ecfbea8577710383ce1f80312a97434c5d74bce8f381336034cf1a"
+        }
     }
-  }
 }

@@ -3,9 +3,11 @@
 ## Table Creation Examples
 
 ### Example 1: Simple Table Creation (Generation Only)
+
 **Input**: "Create a users table with email and password"
 
 **Output**:
+
 ```sql
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -20,15 +22,18 @@ CREATE TABLE users (
 ```
 
 ### Example 2: Table Creation with Execution
+
 **Input**: "Connect to postgresql://root@localhost:26257/mydb and create a users table with email and password"
 
 **Process**:
+
 1. Extract connection URL from prompt
 2. Connect to database
 3. Execute CREATE TABLE statement
 4. Show confirmation
 
 **Output**:
+
 ```
 ## Connection Method
 Using: User-provided URL (postgresql://root@localhost:26257/mydb)
@@ -56,14 +61,17 @@ CREATE TABLE users (
 ## Query Examples
 
 ### Example 3: Query Execution via MCP Server
+
 **Input**: "Execute: Show me all users created in the last week"
 
 **Process**:
+
 1. Detect "execute" keyword
 2. Check for cockroach-cloud MCP availability
 3. Generate and execute query via MCP
 
 **Output**:
+
 ```
 ## Connection Method
 Using: cockroach-cloud MCP server
@@ -90,9 +98,11 @@ Rows returned: 3
 ```
 
 ### Example 4: Complex Query with JOINs
+
 **Input**: "Find all orders from the last week with customer details"
 
 **Output**:
+
 ```sql
 -- Using AS OF SYSTEM TIME for consistent reads
 SELECT
@@ -123,9 +133,11 @@ ORDER BY o.created_at DESC;
 ## Multi-Region Examples
 
 ### Example 5: Global Configuration Table
+
 **Input**: "Create a configuration table that's replicated everywhere"
 
 **Output**:
+
 ```sql
 CREATE TABLE config (
   key STRING PRIMARY KEY,
@@ -135,9 +147,11 @@ CREATE TABLE config (
 ```
 
 ### Example 6: Regional User Table
+
 **Input**: "Create a users table where data stays in user's region"
 
 **Output**:
+
 ```sql
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -152,9 +166,11 @@ CREATE TABLE users (
 ## Performance Optimization Examples
 
 ### Example 7: Bulk Insert
+
 **Input**: "Insert 1000 user records efficiently"
 
 **Output**:
+
 ```sql
 -- Use multi-row INSERT with RETURNING NOTHING for best performance
 INSERT INTO users (email, name, created_at) VALUES
@@ -167,9 +183,11 @@ RETURNING NOTHING;
 ```
 
 ### Example 8: UPSERT Pattern
+
 **Input**: "Update inventory count or insert if doesn't exist"
 
 **Output**:
+
 ```sql
 -- Native UPSERT (most efficient for blind writes)
 UPSERT INTO inventory (product_id, quantity, last_updated)
@@ -192,9 +210,11 @@ WHERE inventory.last_updated < EXCLUDED.last_updated;
 ## JSON Operations Examples
 
 ### Example 9: JSON Column Operations
+
 **Input**: "Query users where metadata contains active status"
 
 **Output**:
+
 ```sql
 -- Check if JSON contains specific key-value
 SELECT * FROM users
@@ -222,9 +242,11 @@ WHERE id = '550e8400-e29b-41d4-a716-446655440000';
 ## Window Function Examples
 
 ### Example 10: Ranking and Analytics
+
 **Input**: "Rank salespeople by quarterly sales"
 
 **Output**:
+
 ```sql
 SELECT
   salesperson_id,
@@ -254,6 +276,7 @@ ORDER BY quarter, quarter_rank;
 ## Testing Commands
 
 ### Quick Schema Verification
+
 ```bash
 # Show all tables
 cockroach sql --execute="SHOW TABLES;"
@@ -266,6 +289,7 @@ cockroach sql --execute="SHOW INDEXES FROM users;"
 ```
 
 ### Performance Testing
+
 ```sql
 -- Explain query plan
 EXPLAIN (VERBOSE) SELECT * FROM users WHERE email = 'test@example.com';

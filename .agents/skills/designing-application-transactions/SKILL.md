@@ -3,8 +3,8 @@ name: designing-application-transactions
 description: Guides application developers in designing correct and performant transaction patterns for CockroachDB, covering transaction lifetime, implicit vs explicit transactions, retry handling with exponential backoff, pushing invariants into SQL, selective pessimistic locking, set-based operations, connection pooling, prepared statements, keyset pagination, follower reads, and separating business logic from database logic. Use when building applications on CockroachDB, designing transaction workflows, handling retries, optimizing application-layer database interactions, or configuring connection pools.
 compatibility: "CockroachDB >= 22.1. Works with or without a live database connection. With connection, requires appropriate privileges on target tables."
 metadata:
-  author: cockroachdb
-  version: "1.0"
+    author: cockroachdb
+    version: "1.0"
 ---
 
 # Designing Application Transactions
@@ -67,6 +67,7 @@ paymentGateway.charge(order);
 ```
 
 **Why it matters:**
+
 - Active intents block concurrent writers, reducing cluster throughput
 - Competing transactions are more likely to encounter `40001` retry errors
 - External work inside a retried transaction may run twice, causing duplicate side effects
@@ -138,7 +139,7 @@ COMMIT;
 **SQLSTATE guidance:**
 
 | Code            | Meaning                                 | Action                                                |
-|-----------------|-----------------------------------------|-------------------------------------------------------|
+| --------------- | --------------------------------------- | ----------------------------------------------------- |
 | `40001`         | Serialization / retryable               | Retry the entire unit of work with backoff and jitter |
 | `40003`         | Ambiguous result / indeterminate commit | Do not blindly replay non-idempotent work             |
 | `08xx` / `57xx` | Network or server transient issues      | Retry carefully, account for ambiguous commits        |
@@ -212,6 +213,7 @@ SELECT transfer_id FROM ins;
 ```
 
 **Key approaches:**
+
 - Use atomic updates: `UPDATE ... SET col = col + 1`
 - Use version or timestamp checks in WHERE clauses for optimistic concurrency
 - Enforce business rules with `UNIQUE`, `CHECK`, `NOT NULL`, and `FOREIGN KEY` constraints
@@ -230,6 +232,7 @@ COMMIT;
 ```
 
 **Use when:**
+
 - The same rows are updated frequently by many concurrent transactions
 - Optimistic retries are causing thrashing
 - Consistency before write is required (inventory, financial transfers)
@@ -491,9 +494,11 @@ pool-name: ingestionPool
 CockroachDB should manage ACID reads, writes, and schema-level integrity. The application layer should orchestrate workflows, external services, queues, and long-running work.
 
 **Inside the transaction:**
+
 - Reads, writes, constraints, short guarded state transitions
 
 **Outside the transaction:**
+
 - HTTP calls, RPC/service calls, email, payment providers, queue publishing
 
 **Asynchronous workflow pattern:**
@@ -509,10 +514,12 @@ def handle_order(order):
 CockroachDB has a practical limit of ~16MB per transaction payload. This limit applies to the TOTAL data written in a single transaction, not just individual rows.
 
 **Two ways to hit the limit:**
+
 - One large row (e.g., a 15MB JSON document)
 - Many moderate rows in one transaction (e.g., 25 INSERTs of 500KB each = 12.5MB)
 
 **Guidelines:**
+
 - Keep individual rows under 1MB
 - Keep total transaction payload under 4MB
 - Limit transactions to <10 statements
@@ -555,7 +562,7 @@ See [monitoring-and-concurrency-testing](references/monitoring-and-concurrency-t
 ## Decision Guide
 
 | Scenario                                    | Recommended Pattern                  |
-|---------------------------------------------|--------------------------------------|
+| ------------------------------------------- | ------------------------------------ |
 | Single SQL statement                        | Implicit transaction (autocommit)    |
 | Multiple statements, all-or-nothing         | Explicit transaction with retry loop |
 | Read current state before write on hot rows | `SELECT ... FOR UPDATE`              |

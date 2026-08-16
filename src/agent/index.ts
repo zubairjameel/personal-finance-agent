@@ -146,7 +146,7 @@ function createChatClient(sessionId: string, context: ChatContext) {
             { role: "user", content: userMessage },
             { role: "assistant", content: assistantText },
         );
-        
+
         if (sessionId) {
             await saveMessage(sessionId, "user", userMessage);
             await saveMessage(sessionId, "assistant", assistantText);

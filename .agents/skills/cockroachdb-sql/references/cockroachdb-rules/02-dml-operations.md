@@ -3,6 +3,7 @@
 ## INSERT Patterns
 
 ### Single and Multi-Row Inserts
+
 ```sql
 -- Single row insert
 INSERT INTO users (email, name) VALUES ('test@example.com', 'Test');
@@ -28,6 +29,7 @@ INSERT INTO archived_orders
 ## UPSERT Operations
 
 ### Native UPSERT vs INSERT ON CONFLICT
+
 ```sql
 -- Native UPSERT
 UPSERT INTO inventory (product_id, quantity) VALUES (1, 100);
@@ -59,6 +61,7 @@ INSERT INTO table VALUES (...)
 ## UPDATE Patterns
 
 ### Efficient Updates
+
 ```sql
 -- Basic update with RETURNING
 UPDATE users
@@ -93,6 +96,7 @@ UPDATE events
 ## DELETE Patterns
 
 ### Safe Deletions
+
 ```sql
 -- Delete with RETURNING
 DELETE FROM users WHERE id = $1 RETURNING *;
@@ -115,6 +119,7 @@ WHERE oi.order_id = o.id
 ## Transaction Control
 
 ### Transaction Isolation Levels
+
 ```sql
 -- Explicit transaction with isolation level
 BEGIN ISOLATION LEVEL SERIALIZABLE;  -- Default in CockroachDB
@@ -136,6 +141,7 @@ COMMIT;
 ```
 
 ### Savepoints
+
 ```sql
 -- Savepoints for partial rollback
 BEGIN;
@@ -150,6 +156,7 @@ COMMIT;
 ```
 
 ### Transaction Characteristics
+
 ```sql
 -- Read-only transactions
 BEGIN READ ONLY;
@@ -169,6 +176,7 @@ SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED;
 ## Prepared Statements
 
 ### Basic Prepared Statements
+
 ```sql
 -- Prepare statement
 PREPARE get_user AS
@@ -184,6 +192,7 @@ DEALLOCATE ALL;  -- Remove all prepared statements
 ```
 
 ### Complex Prepared Statements
+
 ```sql
 -- Prepared statement with multiple parameters
 PREPARE insert_user AS
@@ -205,6 +214,7 @@ EXECUTE batch_update(1.1, 'electronics');  -- 10% increase
 ## Bulk Operations
 
 ### Efficient Bulk Inserts
+
 ```sql
 -- Copy from CSV (fastest for large data)
 COPY users (id, email, name)
@@ -225,6 +235,7 @@ INSERT INTO events (type, data) VALUES
 ```
 
 ### Batch Processing Patterns
+
 ```sql
 -- Process in chunks with LIMIT
 WITH batch AS (

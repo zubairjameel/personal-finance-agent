@@ -1,9 +1,11 @@
 # FUNDAMENTAL PRINCIPLES
 
 ## Core CockroachDB Rules
+
 These principles apply to ALL CockroachDB SQL operations and override everything else:
 
 ### Essential Requirements
+
 1. **Always include PRIMARY KEY** in table definitions
 2. **Prefer UUID** for primary keys in distributed scenarios
 3. **Use UPSERT** for blind writes, INSERT ON CONFLICT for conditional logic
@@ -13,6 +15,7 @@ These principles apply to ALL CockroachDB SQL operations and override everything
 7. **Consider multi-region** patterns for global applications
 
 ## Core Compatibility
+
 - CockroachDB uses PostgreSQL wire protocol and syntax as its base
 - Default transaction isolation level is SERIALIZABLE (highest level)
 - All tables are distributed by default using range partitioning (512MB ranges)
@@ -20,11 +23,13 @@ These principles apply to ALL CockroachDB SQL operations and override everything
 - Prefers explicit over implicit - always specify PRIMARY KEY, data types, etc.
 
 ## Type System Philosophy
+
 - Types are normalized to their canonical forms
 - INT8 (64-bit) is the default integer type
 - JSONB is the only JSON storage format
 
 ## Distribution Best Practices
+
 - Design for distributed execution from the start
 - Use UUID primary keys for better distribution
 - Avoid sequential IDs that cause hotspots
@@ -32,6 +37,7 @@ These principles apply to ALL CockroachDB SQL operations and override everything
 - Batch operations to reduce round trips
 
 ## Performance Principles
+
 - Write operations return immediately after consensus
 - Reads are consistent by default (can use follower reads for stale data)
 - Indexes are globally distributed
