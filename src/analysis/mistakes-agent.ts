@@ -23,6 +23,7 @@ import {
 } from "../mcp/client.ts";
 import { getOrCreateUser, pool } from "../db/index.ts";
 import { fullSync } from "../mcp/sync.ts";
+import { getActiveProviders } from "../ai/provider.ts";
 
 config({ path: ".env.local" });
 
@@ -75,6 +76,13 @@ export async function analyzeFinancialQuestion(
         syncFirst = false,
         userId,
     } = options;
+
+    // Show which AI providers are available
+    if (verbose) {
+        const active = getActiveProviders();
+        console.log(`\n🧠 Active AI providers (fallback order): ${active.join(" → ") || "none — set a key in .env.local"}`);
+        console.log(`   ℹ  MCP tool-use requires Anthropic format — using Anthropic for reasoning loop.`);
+    }
 
     const client = new Anthropic({
         apiKey: process.env["ANTHROPIC_API_KEY"],
@@ -153,7 +161,9 @@ export async function analyzeFinancialQuestion(
 
             if (verbose && !result.isError) {
                 const preview = result.content.slice(0, 180);
-                console.log(`    ↳ ${preview}${result.content.length > 180 ? "…" : ""}`);
+                console.log(
+                    `    ↳ ${preview}${result.content.length > 180 ? "…" : ""}`,
+                );
             }
 
             toolResults.push({

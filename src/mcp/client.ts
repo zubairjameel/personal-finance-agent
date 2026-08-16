@@ -5,6 +5,7 @@
  * (github.com/cockroachdb/cockroachdb-mcp-server v0.1.0) via stdio transport.
  *
  * Exposes dynamic tool listing and execution helpers for pure MCP usage.
+ * Supports converting MCP tools to Anthropic, Groq, and Gemini formats.
  */
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -97,20 +98,69 @@ function extractText(content: Array<{ type: string; text?: string }>): string {
         .join("\n");
 }
 
-// ─── Dynamic MCP API ─────────────────────────────────────────────────────────
+// ─── Dynamic MCP API — Multi-Provider Tool Converters ────────────────────────
 
 /**
- * Dynamically fetch all available MCP tools from CockroachDB MCP server
- * and convert them to Anthropic SDK Tool format.
+ * Fetch all MCP tools and convert to Anthropic SDK format.
  */
 export async function getMcpToolsForAnthropic(): Promise<Anthropic.Tool[]> {
     const client = await getMcpClient();
     const { tools } = await client.listTools();
-
     return tools.map((t) => ({
         name: t.name,
         description: t.description ?? "",
         input_schema: t.inputSchema as Anthropic.Tool["input_schema"],
+    }));
+}
+
+/**
+ * Fetch all MCP tools and convert to OpenAI-compatible format (used by Groq).
+ * Groq uses the same function calling format as OpenAI.
+ */
+export async function getMcpToolsForGroq(): Promise<
+    Array<{
+        type: "function";
+        function: {
+            name: string;
+            description: string;
+            parameters: Record<string, unknown>;
+        };
+    }>
+> {
+    const client = await getMcpClient();
+    const { tools } = await client.listTools();
+    return tools.map((t) => ({
+        type: "function" as const,
+        function: {
+            name: t.name,
+            description: t.description ?? "",
+            parameters: (t.inputSchema as Record<string, unknown>) ?? {
+                type: "object",
+                properties: {},
+            },
+        },
+    }));
+}
+
+/**
+ * Fetch all MCP tools and convert to Google Gemini functionDeclarations format.
+ */
+export async function getMcpToolsForGemini(): Promise<
+    Array<{
+        name: string;
+        description: string;
+        parameters: Record<string, unknown>;
+    }>
+> {
+    const client = await getMcpClient();
+    const { tools } = await client.listTools();
+    return tools.map((t) => ({
+        name: t.name,
+        description: t.description ?? "",
+        parameters: (t.inputSchema as Record<string, unknown>) ?? {
+            type: "object",
+            properties: {},
+        },
     }));
 }
 
