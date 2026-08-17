@@ -108,3 +108,21 @@ FROM transactions t
 JOIN accounts a ON a.id = t.account_id
 WHERE t.amount < 0   -- income only
   AND t.pending = false;
+
+-- Outcome-Verified Agentic Memory (CockroachDB Distributed Vector Indexing)
+-- Stores previous user queries, agent recommendations, 768-dim embeddings,
+-- and verified real-world outcomes ('pending', 'success', 'failed', 'revoked').
+CREATE TABLE IF NOT EXISTS agent_memory (
+    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID        NOT NULL REFERENCES users(id),
+    query_text      STRING      NOT NULL,
+    recommendation  STRING      NOT NULL,
+    embedding       VECTOR(768),
+    outcome         STRING      NOT NULL DEFAULT 'pending', -- pending | success | failed | revoked
+    feedback_notes  STRING,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    INDEX idx_memory_user_outcome (user_id, outcome, created_at DESC)
+);
+

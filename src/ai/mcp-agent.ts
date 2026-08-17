@@ -68,6 +68,8 @@ async function runWithGroq(
     const client = new Groq({ apiKey: process.env["GROQ_API_KEY"] });
     const tools = await getMcpToolsForGroq();
 
+    const GROQ_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b"];
+
     type GroqMessage = {
         role: "system" | "user" | "assistant" | "tool";
         content: string;
@@ -79,68 +81,72 @@ async function runWithGroq(
         }>;
     };
 
-    const messages: GroqMessage[] = [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: question },
-    ];
+    let lastError: Error | null = null;
 
-    let toolCallCount = 0;
-    let finalAnswer = "";
-    const maxIter = 15;
+    for (const modelName of GROQ_MODELS) {
+        try {
+            const messages: GroqMessage[] = [
+                { role: "system", content: SYSTEM_PROMPT },
+                { role: "user", content: question },
+            ];
 
-    for (let i = 0; i < maxIter; i++) {
-        const response = await client.chat.completions.create({
-            model: "llama-3.3-70b-versatile",
-            messages,
-            tools,
-            tool_choice: "auto",
-            max_tokens: 2000,
-        });
+            let toolCallCount = 0;
+            let finalAnswer = "";
+            const maxIter = 10;
 
-        const choice = response.choices[0];
-        if (!choice) break;
+            for (let i = 0; i < maxIter; i++) {
+                const response = await client.chat.completions.create({
+                    model: modelName,
+                    messages,
+                    tools,
+                    tool_choice: "auto",
+                    max_tokens: 2000,
+                });
 
-        const msg = choice.message;
+                const choice = response.choices[0];
+                if (!choice) break;
 
-        // Collect any text
-        if (msg.content) finalAnswer = msg.content;
+                const msg = choice.message;
+                if (msg.content) finalAnswer = msg.content;
+                if (!msg.tool_calls || msg.tool_calls.length === 0) break;
 
-        // If no tool calls, we are done
-        if (!msg.tool_calls || msg.tool_calls.length === 0) break;
+                messages.push({
+                    role: "assistant",
+                    content: msg.content ?? "",
+                    tool_calls: msg.tool_calls,
+                });
 
-        // Add assistant message with tool calls
-        messages.push({
-            role: "assistant",
-            content: msg.content ?? "",
-            tool_calls: msg.tool_calls,
-        });
+                for (const tc of msg.tool_calls) {
+                    toolCallCount++;
+                    const toolName = tc.function.name;
+                    const toolArgs = JSON.parse(tc.function.arguments || "{}") as Record<string, unknown>;
 
-        // Execute each tool call
-        for (const tc of msg.tool_calls) {
-            toolCallCount++;
-            const toolName = tc.function.name;
-            const toolArgs = JSON.parse(tc.function.arguments || "{}") as Record<string, unknown>;
+                    if (verbose) console.log(`  → [Groq/${modelName}] MCP Tool: ${toolName}(${JSON.stringify(toolArgs).slice(0, 80)})`);
 
-            if (verbose) console.log(`  → [Groq] MCP Tool: ${toolName}(${JSON.stringify(toolArgs).slice(0, 80)})`);
+                    const result = await callMcpTool(toolName, toolArgs);
+                    if (verbose) console.log(`    ↳ ${result.content.slice(0, 160)}${result.content.length > 160 ? "…" : ""}`);
 
-            const result = await callMcpTool(toolName, toolArgs);
+                    messages.push({
+                        role: "tool",
+                        tool_call_id: tc.id,
+                        content: result.isError ? `Error: ${result.content}` : result.content,
+                    });
+                }
+            }
 
-            if (verbose) console.log(`    ↳ ${result.content.slice(0, 160)}${result.content.length > 160 ? "…" : ""}`);
-
-            messages.push({
-                role: "tool",
-                tool_call_id: tc.id,
-                content: result.isError ? `Error: ${result.content}` : result.content,
-            });
+            return {
+                answer: finalAnswer,
+                provider: "Groq",
+                model: modelName,
+                toolCallCount,
+            };
+        } catch (err) {
+            lastError = err instanceof Error ? err : new Error(String(err));
+            if (verbose) console.warn(`  ⚠ Groq/${modelName} failed (${lastError.message.slice(0, 80)}) — trying next Groq model...`);
         }
     }
 
-    return {
-        answer: finalAnswer,
-        provider: "Groq",
-        model: "llama-3.3-70b-versatile",
-        toolCallCount,
-    };
+    throw lastError ?? new Error("All Groq models failed.");
 }
 
 // ─── Gemini Tool-Use Loop ─────────────────────────────────────────────────────
@@ -314,15 +320,64 @@ const PROVIDERS: ProviderRunner[] = [
     { name: "Anthropic", keyEnv: "ANTHROPIC_API_KEY",  run: runWithAnthropic },
 ];
 
+import { decideMemoryAction, saveAgentMemory } from "./outcome-memory.ts";
+import { getOrCreateUser } from "../db/index.ts";
+
 /**
  * Run the full MCP financial reasoning agent using the first available provider.
- * Automatically falls back if a provider has no key or throws an error.
+ * Integrates CockroachDB Distributed Vector Memory with Outcome Verification:
+ *   • Checks past outcomes for similar questions (REUSE vs ABSTAIN).
+ *   • Persists new recommendations with 768-dim embeddings in CockroachDB.
  */
 export async function runMcpAgent(
     question: string,
-    options: { verbose?: boolean } = {},
+    options: { verbose?: boolean; bypassMemory?: boolean } = {},
 ): Promise<AgentResult> {
-    const { verbose = true } = options;
+    const { verbose = true, bypassMemory = false } = options;
+
+    let user: { id: string } | null = null;
+    try {
+        user = await getOrCreateUser();
+    } catch {
+        // Continue if DB user check fails
+    }
+
+    let memoryPrefix = "";
+
+    // ── 1. Outcome-Verified Memory Check ────────────────────────────────────
+    if (user && !bypassMemory) {
+        try {
+            const decision = await decideMemoryAction(user.id, question);
+
+            if (verbose) {
+                console.log(`\n🧠 CockroachDB Vector Memory: [${decision.action}] — ${decision.reason}`);
+            }
+
+            // Case A: REUSE verified successful precedent
+            if (decision.action === "REUSE") {
+                return {
+                    answer: `♻️ **VERIFIED PRECEDENT REUSED FROM COCKROACHDB MEMORY**\n` +
+                            `<i>(${decision.reason})</i>\n\n` +
+                            decision.memory.recommendation,
+                    provider: "CockroachDB Memory (Vector Search)",
+                    model: "outcome-verified-reuse",
+                    toolCallCount: 0,
+                };
+            }
+
+            // Case B: ABSTAIN from repeating a failed/revoked recommendation
+            if (decision.action === "ABSTAIN") {
+                memoryPrefix = `⚠️ **PAST FAILURE PRECEDENT (CockroachDB Memory Audit):**\n` +
+                               `<i>${decision.reason}</i>\n` +
+                               `<i>Abstaining from repeating previous advice. Delivering a fresh, updated diagnosis below:</i>\n\n` +
+                               `──────────────────────────────────────────────────\n\n`;
+            }
+        } catch (err) {
+            if (verbose) console.warn(`  ⚠ Memory search skipped: ${err instanceof Error ? err.message : String(err)}`);
+        }
+    }
+
+    // ── 2. Run Multi-Provider AI Brain with MCP Database Tools ─────────────
     const errors: string[] = [];
 
     for (const provider of PROVIDERS) {
@@ -335,7 +390,21 @@ export async function runMcpAgent(
             if (verbose) console.log(`\n🧠 Using ${provider.name} as AI brain...\n${"─".repeat(50)}`);
             const result = await provider.run(question, verbose);
             if (verbose) console.log(`\n✅ ${provider.name} completed (${result.toolCallCount} MCP tool calls)`);
-            return result;
+
+            // ── 3. Persist new recommendation into CockroachDB Vector Memory ─
+            if (user && result.answer) {
+                try {
+                    await saveAgentMemory(user.id, question, result.answer, "pending");
+                    if (verbose) console.log(`💾 Saved recommendation & 768-dim vector embedding to CockroachDB 'agent_memory'`);
+                } catch {
+                    // ignore memory save error
+                }
+            }
+
+            return {
+                ...result,
+                answer: memoryPrefix + result.answer,
+            };
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             errors.push(`${provider.name}: ${msg}`);

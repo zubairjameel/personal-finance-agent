@@ -14,7 +14,9 @@
         "background:watch": "node src/agent/background-loop.ts --watch",
         "plaid:setup": "node bin/plaid-setup.mjs",
         "daemon": "node bin/start-daemon.mjs --watch",
-        "telegram": "node src/telegram/bot.ts"
+        "telegram": "node src/telegram/bot.ts",
+        "memory:list": "node bin/memory-feedback.mjs",
+        "memory:feedback": "node bin/memory-feedback.mjs"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
