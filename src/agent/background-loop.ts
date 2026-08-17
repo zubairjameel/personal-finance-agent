@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 /**
  * src/agent/background-loop.ts
  *
@@ -284,7 +286,9 @@ async function main() {
 }
 
 // ── Always run — this file is always invoked directly via npm scripts ────────
-main().catch((err) => {
-    console.error(c.red("💥 Fatal error in background daemon:"), err);
-    pool.end().finally(() => process.exit(1));
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+    main().catch((err) => {
+        console.error(c.red("💥 Fatal error in background daemon:"), err);
+        pool.end().finally(() => process.exit(1));
+    });
+}
