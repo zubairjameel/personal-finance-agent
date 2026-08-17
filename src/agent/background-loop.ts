@@ -159,7 +159,7 @@ export async function runHeartbeatCycle(): Promise<CycleResult> {
         result.errors.push(`Anomaly detection: ${msg}`);
     }
 
-    // ── Step 4: Show all pending alerts (queued for Telegram delivery) ────
+    // ── Step 4: Dispatch pending alerts to Telegram ───────────────────────
     try {
         const pending = await getPendingAnomalies(userId);
         result.pendingAlerts = pending.length;
@@ -168,7 +168,7 @@ export async function runHeartbeatCycle(): Promise<CycleResult> {
         if (pending.length > 0) {
             log(
                 c.bold(
-                    `📬 ${pending.length} alert(s) queued in CockroachDB for Telegram delivery:`,
+                    `📬 ${pending.length} alert(s) queued in CockroachDB:`,
                 ),
             );
             for (const a of pending) {
@@ -178,12 +178,22 @@ export async function runHeartbeatCycle(): Promise<CycleResult> {
                         : c.yellow(a.severity);
                 log(`  • [${sev}] ${a.title}`);
             }
+
+            // Dispatch alerts if Telegram credentials configured
+            if (process.env["TELEGRAM_BOT_TOKEN"] && process.env["TELEGRAM_CHAT_ID"]) {
+                const { pushPendingAnomalyAlerts } = await import("../telegram/bot.ts");
+                process.stdout.write(`  📨 Dispatching alerts to Telegram... `);
+                const sent = await pushPendingAnomalyAlerts(userId);
+                console.log(c.green(`✓ ${sent} alert(s) delivered to Telegram chat.`));
+            } else {
+                log(c.dim(`  ℹ Set TELEGRAM_BOT_TOKEN & TELEGRAM_CHAT_ID in .env.local to receive push alerts on your phone.`));
+            }
         } else {
             log(c.green("✅ All clear — no pending anomalies in queue"));
         }
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        result.errors.push(`Pending alerts fetch: ${msg}`);
+        result.errors.push(`Pending alerts dispatch: ${msg}`);
     }
 
     // ── Summary ────────────────────────────────────────────────────────────
