@@ -126,3 +126,7 @@ CREATE TABLE IF NOT EXISTS agent_memory (
     INDEX idx_memory_user_outcome (user_id, outcome, created_at DESC)
 );
 
+-- L2 ANN index. user_id is a prefix column so tenant filtering remains eligible.
+CREATE VECTOR INDEX IF NOT EXISTS idx_memory_user_embedding
+ON agent_memory (user_id, embedding vector_l2_ops);
+

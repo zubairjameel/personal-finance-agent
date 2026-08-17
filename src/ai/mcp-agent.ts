@@ -15,6 +15,9 @@
  */
 
 import { config } from "dotenv";
+import type Anthropic from "@anthropic-ai/sdk";
+import type { ChatCompletionMessageParam } from "groq-sdk/resources/chat/completions";
+import type { FunctionDeclaration } from "@google/generative-ai";
 import {
     getMcpToolsForAnthropic,
     getMcpToolsForGroq,
@@ -97,7 +100,7 @@ async function runWithGroq(
             for (let i = 0; i < maxIter; i++) {
                 const response = await client.chat.completions.create({
                     model: modelName,
-                    messages,
+                    messages: messages as ChatCompletionMessageParam[],
                     tools,
                     tool_choice: "auto",
                     max_tokens: 2000,
@@ -162,7 +165,7 @@ async function runWithGemini(
     const model = genAI.getGenerativeModel({
         model: "gemini-1.5-flash",
         systemInstruction: SYSTEM_PROMPT,
-        tools: [{ functionDeclarations: mcpTools }],
+        tools: [{ functionDeclarations: mcpTools as unknown as FunctionDeclaration[] }],
     });
 
     const chat = model.startChat();

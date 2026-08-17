@@ -24,6 +24,7 @@
  */
 
 import { config } from "dotenv";
+import { fileURLToPath } from "url";
 import { getOrCreateUser, pool } from "../db/index.ts";
 import { fullSync } from "../mcp/sync.ts";
 import { detectAnomalies, getPendingAnomalies } from "./anomaly-detector.ts";
@@ -233,7 +234,7 @@ function setupGracefulShutdown(intervalId?: ReturnType<typeof setInterval>) {
 
 // ─── Main entrypoint ────────────────────────────────────────────────────────
 
-async function main() {
+export async function main() {
     // Parse --interval=N flag (default 60 seconds)
     const intervalArg = process.argv
         .find((a) => a.startsWith("--interval="))
@@ -283,8 +284,13 @@ async function main() {
     }
 }
 
-// ── Always run — this file is always invoked directly via npm scripts ────────
-main().catch((err) => {
-    console.error(c.red("💥 Fatal error in background daemon:"), err);
-    pool.end().finally(() => process.exit(1));
-});
+const isDirectExecution = process.argv[1]
+    ? fileURLToPath(import.meta.url) === process.argv[1]
+    : false;
+
+if (isDirectExecution) {
+    main().catch((err) => {
+        console.error(c.red("💥 Fatal error in background daemon:"), err);
+        pool.end().finally(() => process.exit(1));
+    });
+}

@@ -3,6 +3,7 @@
     "scripts": {
         "start": "node src/agent/index.ts",
         "build": "npx rimraf dist && tsc",
+        "test": "npm run build && node --test dist/tests/*.test.js",
         "lint": "eslint .",
         "format": "prettier --write .",
         "db:init": "node src/db/init.ts",
@@ -15,6 +16,7 @@
         "plaid:setup": "node bin/plaid-setup.mjs",
         "daemon": "node bin/start-daemon.mjs --watch",
         "telegram": "node src/telegram/bot.ts",
+        "telegram:webhook": "node bin/register-webhook.mjs",
         "memory:list": "node bin/memory-feedback.mjs",
         "memory:feedback": "node bin/memory-feedback.mjs"
     },
@@ -30,9 +32,11 @@
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.115.0",
+        "@aws-sdk/client-secrets-manager": "^3.876.0",
         "@google/generative-ai": "^0.24.1",
         "@modelcontextprotocol/sdk": "^1.30.0",
         "dotenv": "^17.4.2",
+        "esbuild": "^0.25.12",
         "groq-sdk": "^1.5.0",
         "pg": "^8.23.0",
         "plaid": "^45.0.0",

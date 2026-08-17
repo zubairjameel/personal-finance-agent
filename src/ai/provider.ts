@@ -79,7 +79,7 @@ async function callGemini(
 
     const model = genAI.getGenerativeModel({
         model: "gemini-1.5-flash",
-        systemInstruction: options.system,
+        ...(options.system ? { systemInstruction: options.system } : {}),
     });
 
     // Convert messages to Gemini format
@@ -112,14 +112,14 @@ async function callAnthropic(
     const response = await client.messages.create({
         model: "claude-haiku-4-5",
         max_tokens: options.maxTokens ?? 2000,
-        system: options.system,
+        ...(options.system ? { system: options.system } : {}),
         messages,
     });
 
     const text =
         response.content
-            .filter((b): b is { type: "text"; text: string } => b.type === "text")
-            .map((b) => b.text)
+            .filter((b) => b.type === "text")
+            .map((b) => b.type === "text" ? b.text : "")
             .join("\n") ?? "";
 
     return {
@@ -190,9 +190,10 @@ export async function ask(
     prompt: string,
     systemPrompt?: string,
 ): Promise<AIResponse> {
-    return callAI([{ role: "user", content: prompt }], {
-        system: systemPrompt,
-    });
+    return callAI(
+        [{ role: "user", content: prompt }],
+        systemPrompt ? { system: systemPrompt } : {},
+    );
 }
 
 /**

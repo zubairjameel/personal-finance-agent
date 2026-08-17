@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Kadmus serverless personal-finance agent
+
+Parameters:
+  ApplicationSecretArn:
+    Type: String
+    Description: ARN of an existing Secrets Manager JSON secret containing application credentials
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures: [arm64]
+    MemorySize: 512
+    Tracing: Active
+    Environment:
+      Variables:
+        APPLICATION_SECRET_ARN: !Ref ApplicationSecretArn
+        COCKROACH_MCP_URL: https://cockroachlabs.cloud/mcp
+    LoggingConfig:
+      LogFormat: JSON
+      ApplicationLogLevel: INFO
+      SystemLogLevel: INFO
+
+Resources:
+  TelegramApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: prod
+
+  HeartbeatFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: kadmus-heartbeat
+      CodeUri: .
+      Handler: src/lambda/heartbeat.handler
+      Timeout: 120
+      ReservedConcurrentExecutions: 1
+      Policies:
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref ApplicationSecretArn
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [src/lambda/heartbeat.ts]
+        Format: esm
+        OutExtension: [.js=.mjs]
+        Minify: true
+        Sourcemap: true
+        Target: es2022
+
+  TelegramFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: kadmus-telegram
+      CodeUri: .
+      Handler: src/lambda/telegram.handler
+      Timeout: 25
+      Policies:
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref ApplicationSecretArn
+      Events:
+        TelegramWebhook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TelegramApi
+            Path: /telegram
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [src/lambda/telegram.ts]
+        Format: esm
+        OutExtension: [.js=.mjs]
+        Minify: true
+        Sourcemap: true
+        Target: es2022
+
+  HeartbeatDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: kadmus-heartbeat-dlq
+      MessageRetentionPeriod: 1209600
+
+  SchedulerInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: scheduler.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeHeartbeat
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt HeartbeatFunction.Arn
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt HeartbeatDeadLetterQueue.Arn
+
+  HeartbeatSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: kadmus-heartbeat-every-five-minutes
+      FlexibleTimeWindow: { Mode: 'OFF' }
+      ScheduleExpression: rate(5 minutes)
+      State: ENABLED
+      Target:
+        Arn: !GetAtt HeartbeatFunction.Arn
+        RoleArn: !GetAtt SchedulerInvokeRole.Arn
+        RetryPolicy:
+          MaximumEventAgeInSeconds: 600
+          MaximumRetryAttempts: 2
+        DeadLetterConfig:
+          Arn: !GetAtt HeartbeatDeadLetterQueue.Arn
+
+Outputs:
+  TelegramWebhookUrl:
+    Value: !Sub https://${TelegramApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod/telegram
+  HeartbeatFunctionArn:
+    Value: !GetAtt HeartbeatFunction.Arn

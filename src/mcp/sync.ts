@@ -13,6 +13,7 @@
  */
 
 import { config } from "dotenv";
+import { fileURLToPath } from "url";
 import { pool } from "../db/index.ts";
 import {
     Configuration,
@@ -245,7 +246,7 @@ export async function fullSync(userId: string): Promise<{
 // Standalone runner (npm run db:sync)
 // ---------------------------------------------------------------------------
 
-if (process.argv[1]?.endsWith("sync.ts")) {
+async function main(): Promise<void> {
     const { getOrCreateUser } = await import("../db/index.ts");
     const user = await getOrCreateUser();
     console.log(`Syncing for user ${user.id}…`);
@@ -257,4 +258,15 @@ if (process.argv[1]?.endsWith("sync.ts")) {
         );
     }
     await pool.end();
+}
+
+const isDirectExecution = process.argv[1]
+    ? fileURLToPath(import.meta.url) === process.argv[1]
+    : false;
+
+if (isDirectExecution) {
+    main().catch((error) => {
+        console.error("Plaid sync failed:", error instanceof Error ? error.message : String(error));
+        pool.end().finally(() => process.exit(1));
+    });
 }

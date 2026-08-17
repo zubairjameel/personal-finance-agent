@@ -12,35 +12,36 @@
  */
 
 import { config } from "dotenv";
-import { getPendingAnomalies, markAnomaliesNotified, DetectedAnomaly } from "../agent/anomaly-detector.ts";
+import { fileURLToPath } from "url";
+import { getPendingAnomalies, markAnomaliesNotified } from "../agent/anomaly-detector.ts";
+import type { DetectedAnomaly } from "../agent/anomaly-detector.ts";
 import { getOrCreateUser, pool } from "../db/index.ts";
 import { runMcpAgent } from "../ai/mcp-agent.ts";
 
 config({ path: ".env.local" });
 
-const BOT_TOKEN = process.env["TELEGRAM_BOT_TOKEN"];
-const CHAT_ID = process.env["TELEGRAM_CHAT_ID"];
-
-const TELEGRAM_API_BASE = `https://api.telegram.org/bot${BOT_TOKEN}`;
+const botToken = () => process.env["TELEGRAM_BOT_TOKEN"];
+const chatId = () => process.env["TELEGRAM_CHAT_ID"];
+const telegramApiBase = () => `https://api.telegram.org/bot${botToken()}`;
 
 /**
  * Send a message via Telegram Bot API using native fetch.
  */
 export async function sendTelegramMessage(
     text: string,
-    chatId: string | number = CHAT_ID!,
+    targetChatId: string | number = chatId()!,
     parseMode: "HTML" | "Markdown" = "HTML",
 ): Promise<boolean> {
-    if (!BOT_TOKEN || !chatId) {
+    if (!botToken() || !targetChatId) {
         return false;
     }
 
     try {
-        const res = await fetch(`${TELEGRAM_API_BASE}/sendMessage`, {
+        const res = await fetch(`${telegramApiBase()}/sendMessage`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                chat_id: chatId,
+                chat_id: targetChatId,
                 text,
                 parse_mode: parseMode,
                 disable_web_page_preview: true,
@@ -92,7 +93,7 @@ function escapeHtml(str: string): string {
  * Marks them as 'notified' once delivered.
  */
 export async function pushPendingAnomalyAlerts(userId: string): Promise<number> {
-    if (!BOT_TOKEN || !CHAT_ID) {
+    if (!botToken() || !chatId()) {
         return 0;
     }
 
@@ -104,7 +105,7 @@ export async function pushPendingAnomalyAlerts(userId: string): Promise<number> 
 
     for (const anomaly of pending) {
         const msg = formatAnomalyMessage(anomaly);
-        const sent = await sendTelegramMessage(msg, CHAT_ID);
+        const sent = await sendTelegramMessage(msg, chatId());
         if (sent) {
             sentCount++;
             if (anomaly.id) notifiedIds.push(anomaly.id);
@@ -123,7 +124,7 @@ export async function pushPendingAnomalyAlerts(userId: string): Promise<number> 
 let lastUpdateId = 0;
 let isPolling = false;
 
-interface TelegramUpdate {
+export interface TelegramUpdate {
     update_id: number;
     message?: {
         message_id: number;
@@ -134,7 +135,7 @@ interface TelegramUpdate {
     };
 }
 
-async function handleTelegramMessage(update: TelegramUpdate) {
+export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void> {
     const msg = update.message;
     if (!msg || !msg.text) return;
 
@@ -142,7 +143,7 @@ async function handleTelegramMessage(update: TelegramUpdate) {
     const userText = msg.text.trim();
     const userName = msg.from?.first_name ?? "there";
 
-    console.log(`[Telegram] Message from ${userName} (${chatId}): "${userText}"`);
+    console.log(`[Telegram] Processing update ${update.update_id}`);
 
     // Command: /start or /help
     if (userText === "/start" || userText === "/help") {
@@ -251,7 +252,7 @@ async function handleTelegramMessage(update: TelegramUpdate) {
  * Start long-polling loop for Telegram updates.
  */
 export async function startTelegramBot(): Promise<void> {
-    if (!BOT_TOKEN) {
+    if (!botToken()) {
         console.error("❌ TELEGRAM_BOT_TOKEN is not set in .env.local — cannot start Telegram bot.");
         return;
     }
@@ -260,24 +261,24 @@ export async function startTelegramBot(): Promise<void> {
     isPolling = true;
 
     // Send a startup greeting if CHAT_ID is configured
-    if (CHAT_ID) {
+    if (chatId()) {
         await sendTelegramMessage(
             "🛡️ <b>Kadmus Sentinel Activated</b>\n" +
             "<i>24/7 Autonomous Financial Guardian is now online and connected.</i>",
-            CHAT_ID,
+            chatId(),
         );
     }
 
     while (isPolling) {
         try {
-            const url = `${TELEGRAM_API_BASE}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`;
+            const url = `${telegramApiBase()}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`;
             const res = await fetch(url);
             const data = (await res.json()) as { ok: boolean; result?: TelegramUpdate[] };
 
             if (data.ok && Array.isArray(data.result)) {
                 for (const update of data.result) {
                     lastUpdateId = Math.max(lastUpdateId, update.update_id);
-                    await handleTelegramMessage(update);
+                    await handleTelegramUpdate(update);
                 }
             }
         } catch (err) {
@@ -289,7 +290,11 @@ export async function startTelegramBot(): Promise<void> {
 }
 
 // Standalone runner if executed directly
-if (process.argv[1]?.includes("bot.ts") || process.argv[1]?.includes("bot.js")) {
+const isDirectExecution = process.argv[1]
+    ? fileURLToPath(import.meta.url) === process.argv[1]
+    : false;
+
+if (isDirectExecution) {
     startTelegramBot().catch((err) => {
         console.error("Fatal Telegram bot error:", err);
         process.exit(1);

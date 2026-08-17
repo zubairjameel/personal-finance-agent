@@ -100,7 +100,7 @@ export async function searchSimilarMemory(
             updated_at AS "updatedAt"
          FROM agent_memory
          WHERE user_id = $2 AND embedding IS NOT NULL
-         ORDER BY distance ASC
+         ORDER BY embedding <-> $1::VECTOR(768)
          LIMIT 1`,
         [vectorSql, userId],
     );
