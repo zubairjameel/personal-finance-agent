@@ -132,6 +132,7 @@ function startAgent(intervalSeconds) {
     log(c.cyan(`Starting heartbeat agent (every ${intervalSeconds}s)...`));
 
     agentProcess = spawn(process.execPath, [
+        "--experimental-strip-types",
         "src/agent/background-loop.ts",
         "--watch",
         `--interval=${intervalSeconds}`,
@@ -205,7 +206,7 @@ Or run: curl https://binaries.cockroachdb.com/cockroach-v24.3.11.windows-6.2-amd
     // Step 4.5: Auto-apply database schemas if needed
     try {
         log(c.dim("Checking & ensuring database schemas..."));
-        execSync(`node src/db/init-financial.ts`, { stdio: "ignore" });
+        execSync(`node --experimental-strip-types src/db/init-financial.ts`, { stdio: "ignore" });
         log(c.green("✓ Database schemas verified"));
     } catch (err) {
         log(c.yellow(`⚠ Schema init note: ${err.message}`));

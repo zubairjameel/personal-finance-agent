@@ -24,7 +24,8 @@ import {
 
 config({ path: ".env.local" });
 
-const SYSTEM_PROMPT = `You are Kadmus, an autonomous financial intelligence sentinel and advisor with direct, real-time access to the user's CockroachDB financial memory through native Model Context Protocol (MCP) database tools.
+function buildSystemPrompt(userId: string): string {
+    return `You are Kadmus, an autonomous financial intelligence sentinel and advisor with direct, real-time access to the user's CockroachDB financial memory through native Model Context Protocol (MCP) database tools.
 
 ## Who You Are:
 - Name: Kadmus
@@ -32,24 +33,35 @@ const SYSTEM_PROMPT = `You are Kadmus, an autonomous financial intelligence sent
 - Memory Core: CockroachDB (distributed, resilient, persistent transactional database)
 - Mission: Protect the user's financial wellbeing, catch dangerous spending patterns, audit anomalies, and provide honest, data-backed insights.
 
+## CRITICAL — User Identity:
+- The current user's ID is: '${userId}'
+- ALWAYS filter every SQL query with: WHERE user_id = '${userId}'
+- NEVER ask the user for their ID — you already have it above.
+- Do NOT expose this UUID to the user in your response.
+
 ## How to Work with CockroachDB (MCP Tools):
 - The default database is \`defaultdb\` (public schema).
-- Primary Tables:
+- Primary Tables (always filter by user_id):
   • \`spending_history\` (id, user_id, amount, category, merchant_name, transaction_name, date, account_name)
+  • \`income_history\` (id, user_id, amount, category, merchant_name, transaction_name, date, account_name)
   • \`anomalies\` (id, user_id, type, severity, title, description, amount, merchant_name, status, created_at)
-  • \`bank_accounts\` (id, user_id, name, type, balance_current, balance_available)
+  • \`accounts\` (id, user_id, name, type, subtype, currency)
+  • \`transactions\` (id, account_id, user_id, date, merchant_name, name, amount, category_primary, pending)
 - Use \`select_query\` to query transactions, anomalies, and balances with SQL.
 - Always add \`LIMIT\` to SELECT queries.
 - Formulate your diagnosis based ONLY on real queried data. Never hallucinate numbers or dates.
 
-## Formatting Your Diagnosis:
-Structure your response cleanly using markdown:
-- 🏛️ **The Verdict**: One direct, blunt summary of the financial reality.
-- 🔍 **The Evidence**: Bullet points detailing exact numbers, amounts, dates, and merchants retrieved from the database.
-- ⚠️ **The Pattern**: Root behavioral habits (e.g. impulse purchases, subscription leaks, food delivery surges).
-- 💡 **Actionable Remedy**: The single highest-leverage financial action the user should take right now.
+## Formatting Your Diagnosis (CRITICAL for Telegram readability):
+Respond naturally and conversationally. Do NOT use markdown tables with vertical pipes | | (Telegram does not render tables). Instead, use clean bullet points:
+- **The Verdict**: One direct, blunt summary of the financial reality.
+- **The Evidence**: Bullet points with bold amounts and details:
+  • **$500.00** — United Airlines (Travel, 2026-08-10)
+  • **$5,850.00** — ACH Transfer (Transfer Out, 2026-08-11)
+- **The Pattern**: Root behavioral habits driving the problem.
+- **One Fix**: The single highest-leverage action the user should take right now.
 
-Be sharp, transparent, empathetic yet direct, and strictly grounded in database evidence.`;
+Be sharp, empathetic, and strictly grounded in database evidence.`;
+}
 
 export interface AgentResult {
     answer: string;
@@ -63,10 +75,12 @@ export interface AgentResult {
 async function runWithGroq(
     question: string,
     verbose: boolean,
+    userId: string,
 ): Promise<AgentResult> {
     const { default: Groq } = await import("groq-sdk");
     const client = new Groq({ apiKey: process.env["GROQ_API_KEY"] });
     const tools = await getMcpToolsForGroq();
+    const SYSTEM_PROMPT = buildSystemPrompt(userId);
 
     const GROQ_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b"];
 
@@ -134,6 +148,18 @@ async function runWithGroq(
                 }
             }
 
+            // If the loop exhausted without a text answer, force one synthesis call
+            if (!finalAnswer && toolCallCount > 0) {
+                messages.push({ role: "user", content: "Based on the database data you just retrieved, please now provide your complete financial diagnosis." });
+                const synthRes = await client.chat.completions.create({
+                    model: modelName,
+                    messages,
+                    max_tokens: 2000,
+                    temperature: 0.3,
+                });
+                finalAnswer = synthRes.choices[0]?.message?.content ?? "";
+            }
+
             return {
                 answer: finalAnswer,
                 provider: "Groq",
@@ -154,10 +180,12 @@ async function runWithGroq(
 async function runWithGemini(
     question: string,
     verbose: boolean,
+    userId: string,
 ): Promise<AgentResult> {
     const { GoogleGenerativeAI } = await import("@google/generative-ai");
     const genAI = new GoogleGenerativeAI(process.env["GEMINI_API_KEY"]!);
     const mcpTools = await getMcpToolsForGemini();
+    const SYSTEM_PROMPT = buildSystemPrompt(userId);
 
     const model = genAI.getGenerativeModel({
         model: "gemini-1.5-flash",
@@ -238,10 +266,12 @@ async function runWithGemini(
 async function runWithAnthropic(
     question: string,
     verbose: boolean,
+    userId: string,
 ): Promise<AgentResult> {
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const client = new Anthropic({ apiKey: process.env["ANTHROPIC_API_KEY"] });
     const tools = await getMcpToolsForAnthropic();
+    const SYSTEM_PROMPT = buildSystemPrompt(userId);
 
     const messages: Anthropic.MessageParam[] = [
         { role: "user", content: question },
@@ -311,7 +341,7 @@ async function runWithAnthropic(
 type ProviderRunner = {
     name: string;
     keyEnv: string;
-    run: (question: string, verbose: boolean) => Promise<AgentResult>;
+    run: (question: string, verbose: boolean, userId: string) => Promise<AgentResult>;
 };
 
 const PROVIDERS: ProviderRunner[] = [
@@ -388,7 +418,7 @@ export async function runMcpAgent(
 
         try {
             if (verbose) console.log(`\n🧠 Using ${provider.name} as AI brain...\n${"─".repeat(50)}`);
-            const result = await provider.run(question, verbose);
+            const result = await provider.run(question, verbose, user?.id ?? "unknown");
             if (verbose) console.log(`\n✅ ${provider.name} completed (${result.toolCallCount} MCP tool calls)`);
 
             // ── 3. Persist new recommendation into CockroachDB Vector Memory ─
