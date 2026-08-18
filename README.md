@@ -43,13 +43,16 @@ For the hackathon submission criteria, here is the exact breakdown of how Kadmus
 │                                      │  • Telegram alert dispatch                   │   │
 │                                      └──────────────────┬───────────────────────────┘   │
 │                                                         │                               │
-│   ┌────────────────────────┐         ┌──────────────────▼───────────────────────────┐   │
-│   │ API GATEWAY HTTP API   │ ──────► │        KADMUS TELEGRAM LAMBDA                │   │
-│   │   /telegram webhook    │         │  • Webhook secret verification              │   │
-│   └───────────▲────────────┘         │  • One Telegram update per invocation        │   │
+│   ┌────────────────────────┐         ┌──────────────────────────────────────────────┐   │
+│   │ API GATEWAY HTTP API   │ ──────► │       TELEGRAM WEBHOOK LAMBDA               │   │
+│   │   /telegram webhook    │         │  • Verify secret • Enqueue • Return 200     │   │
+│   └───────────▲────────────┘         └──────────────────┬───────────────────────────┘   │
+│               │                                        ▼                               │
+│               │                      ┌──────────────────────────────────────────────┐   │
+│               │                      │ SQS FIFO ──► TELEGRAM AI WORKER LAMBDA       │   │
+│               │                      │ • Deduplicate update_id • Long MCP/AI jobs   │   │
 │               │                      └──────────────────────────────────────────────┘   │
-│               │                                                                         │
-│   CloudWatch Logs • Secrets Manager • SQS Dead-Letter Queue                            │
+│   CloudWatch Logs • Secrets Manager • SQS Dead-Letter Queues                           │
 └───────────────┼─────────────────────────────────────────────────────────────────────────┘
                 │
                 ├───────────────────────────────────────┐
@@ -80,7 +83,7 @@ For the hackathon submission criteria, here is the exact breakdown of how Kadmus
 | **CockroachDB Tool 1** | **CockroachDB Managed MCP Server** (15 Native SQL discovery & query tools over stdio) | ✅ Completed |
 | **CockroachDB Tool 2** | **CockroachDB Distributed Vector Indexing** (`agent_memory` with 768-dim vectors & outcome verification) | ✅ Completed |
 | **CockroachDB Tool 3** | **CockroachDB Agent Skills** (`cockroachdb-sql`, `designing-application-transactions`) | ✅ Completed |
-| **AWS Infrastructure** | **AWS Lambda** (heartbeat + Telegram), **EventBridge Scheduler**, **API Gateway HTTP API**, **CloudWatch Logs**, and **SQS DLQ** via AWS SAM | ✅ Built & Locally Validated |
+| **AWS Infrastructure** | **AWS Lambda** (heartbeat + webhook + AI worker), **EventBridge Scheduler**, **API Gateway HTTP API**, **SQS FIFO/DLQ**, and **CloudWatch Logs** via AWS SAM | ✅ Built & Locally Validated |
 | **Core Database** | CockroachDB v25.4 (CCL Distributed SQL, Views, Indexes) | ✅ Completed |
 | **Financial API** | Plaid API Sandbox (`transactionsSync`, `identityGet`, `liabilitiesGet`) | ✅ Completed |
 | **User Interface** | Telegram Bot API (`@KadmusFinanceBot` with real-time push & interactive Q&A) | ✅ Completed |

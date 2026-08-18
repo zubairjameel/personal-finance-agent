@@ -260,8 +260,6 @@ export function createTelegramUpdateHandler(
     }
 
     // Default: Run Kadmus AI Reasoning Agent on the user's question
-    await dependencies.sendMessage("🔍 <i>Kadmus is querying CockroachDB and analyzing your financial memory...</i>", chatId);
-
     try {
         const result = await dependencies.runAgent(userText, { verbose: false });
         const reply =

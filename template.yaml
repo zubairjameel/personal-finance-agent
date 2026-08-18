@@ -35,6 +35,12 @@ Resources:
       LogGroupName: /aws/lambda/kadmus-telegram
       RetentionInDays: 14
 
+  TelegramWorkerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/kadmus-telegram-worker
+      RetentionInDays: 14
+
   TelegramApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -66,10 +72,15 @@ Resources:
       FunctionName: kadmus-telegram
       CodeUri: .
       Handler: src/lambda/telegram.handler
-      Timeout: 25
+      Timeout: 10
+      Environment:
+        Variables:
+          TELEGRAM_QUEUE_URL: !Ref TelegramJobsQueue
       Policies:
         - AWSSecretsManagerGetSecretValuePolicy:
             SecretArn: !Ref ApplicationSecretArn
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt TelegramJobsQueue.QueueName
       Events:
         TelegramWebhook:
           Type: HttpApi
@@ -86,6 +97,54 @@ Resources:
         Minify: true
         Sourcemap: true
         Target: es2022
+
+  TelegramWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: kadmus-telegram-worker
+      CodeUri: .
+      Handler: src/lambda/telegram-worker.handler
+      Timeout: 180
+      Policies:
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref ApplicationSecretArn
+      Events:
+        TelegramJobs:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt TelegramJobsQueue.Arn
+            BatchSize: 1
+            FunctionResponseTypes: [ReportBatchItemFailures]
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [src/lambda/telegram-worker.ts]
+        Format: cjs
+        OutExtension: [.js=.cjs]
+        Minify: true
+        Sourcemap: true
+        Target: es2022
+
+  TelegramJobsDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: kadmus-telegram-jobs-dlq.fifo
+      FifoQueue: true
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  TelegramJobsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: kadmus-telegram-jobs.fifo
+      FifoQueue: true
+      ContentBasedDeduplication: false
+      MessageRetentionPeriod: 86400
+      VisibilityTimeout: 1080
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt TelegramJobsDeadLetterQueue.Arn
+        maxReceiveCount: 5
 
   HeartbeatDeadLetterQueue:
     Type: AWS::SQS::Queue
@@ -139,3 +198,5 @@ Outputs:
     Value: !Ref HeartbeatFunction
   TelegramFunctionName:
     Value: !Ref TelegramFunction
+  TelegramWorkerFunctionName:
+    Value: !Ref TelegramWorkerFunction

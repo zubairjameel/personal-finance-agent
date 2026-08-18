@@ -35,6 +35,7 @@
     "dependencies": {
         "@anthropic-ai/sdk": "^0.115.0",
         "@aws-sdk/client-secrets-manager": "^3.876.0",
+        "@aws-sdk/client-sqs": "^3.1112.0",
         "@google/generative-ai": "^0.24.1",
         "@inquirer/prompts": "^8.5.2",
         "@modelcontextprotocol/sdk": "^1.30.0",

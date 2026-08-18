@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "crypto";
+import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import type { TelegramUpdate } from "../telegram/bot.ts";
 import { loadApplicationSecrets } from "./secrets.ts";
 
@@ -8,12 +9,21 @@ export interface HttpEvent {
     isBase64Encoded?: boolean;
 }
 
-type UpdateHandler = (update: TelegramUpdate) => Promise<void>;
+type UpdateEnqueuer = (update: TelegramUpdate) => Promise<void>;
 type SecretsLoader = (requiredKeys?: readonly string[]) => Promise<void>;
 
-const handleTelegramUpdateAfterSecrets: UpdateHandler = async (update) => {
-    const { handleTelegramUpdate } = await import("../telegram/bot.ts");
-    await handleTelegramUpdate(update);
+const sqs = new SQSClient({});
+
+const enqueueTelegramUpdate: UpdateEnqueuer = async (update) => {
+    const queueUrl = process.env["TELEGRAM_QUEUE_URL"];
+    if (!queueUrl) throw new Error("TELEGRAM_QUEUE_URL is not configured");
+
+    await sqs.send(new SendMessageCommand({
+        QueueUrl: queueUrl,
+        MessageBody: JSON.stringify(update),
+        MessageGroupId: String(update.message?.chat.id ?? "telegram"),
+        MessageDeduplicationId: String(update.update_id),
+    }));
 };
 
 function header(event: HttpEvent, name: string): string | undefined {
@@ -29,16 +39,11 @@ function secretsMatch(actual: string | undefined, expected: string): boolean {
 }
 
 export function createTelegramHandler(
-    processUpdate: UpdateHandler = handleTelegramUpdateAfterSecrets,
+    enqueueUpdate: UpdateEnqueuer = enqueueTelegramUpdate,
     loadSecrets: SecretsLoader = loadApplicationSecrets,
 ) {
     return async (event: HttpEvent): Promise<{ statusCode: number; body: string }> => {
-        await loadSecrets([
-            "DATABASE_URL",
-            "TELEGRAM_BOT_TOKEN",
-            "TELEGRAM_CHAT_ID",
-            "TELEGRAM_WEBHOOK_SECRET",
-        ]);
+        await loadSecrets(["TELEGRAM_WEBHOOK_SECRET"]);
         const expected = process.env["TELEGRAM_WEBHOOK_SECRET"];
         if (!expected) throw new Error("TELEGRAM_WEBHOOK_SECRET is not configured");
         if (!secretsMatch(header(event, "x-telegram-bot-api-secret-token"), expected)) {
@@ -50,7 +55,7 @@ export function createTelegramHandler(
                 : event.body ?? "";
             const update = JSON.parse(raw) as TelegramUpdate;
             if (!Number.isInteger(update.update_id)) throw new Error("Missing update_id");
-            await processUpdate(update);
+            await enqueueUpdate(update);
             return { statusCode: 200, body: "OK" };
         } catch (error) {
             if (error instanceof SyntaxError || (error instanceof Error && error.message === "Missing update_id")) {
