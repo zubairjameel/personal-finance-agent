@@ -1,7 +1,6 @@
 import { config } from "dotenv";
 import { readFile } from "fs/promises";
 import path from "path";
-import { fileURLToPath } from "url";
 import { Pool } from "pg";
 import net from "net";
 import { spawn } from "child_process";
@@ -9,8 +8,6 @@ import { existsSync } from "fs";
 import os from "os";
 
 config({ path: ".env.local" });
-
-const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function checkPort(port = 26257): Promise<boolean> {
     return new Promise((resolve) => {
@@ -61,7 +58,10 @@ export const pool = new Pool({
 
 export async function initSchema() {
     await ensureCockroachRunning();
-    const schema = await readFile(path.join(dirname, "schema.sql"), "utf-8");
+    const schema = await readFile(
+        path.resolve(process.cwd(), "src", "db", "schema.sql"),
+        "utf-8",
+    );
     await pool.query(schema);
 }
 

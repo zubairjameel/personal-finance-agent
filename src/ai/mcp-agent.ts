@@ -7,7 +7,7 @@
  * whichever AI provider is available, in this order:
  *
  *   1. Groq      (GROQ_API_KEY)   — free, 14k req/day, Llama 3.3 70B
- *   2. Gemini    (GEMINI_API_KEY) — free, 1500 req/day, Gemini 1.5 Flash
+ *   2. Gemini    (GEMINI_API_KEY) — Gemini Flash with tool calling
  *   3. Anthropic (ANTHROPIC_API_KEY) — paid fallback, Claude Haiku
  *
  * All three providers support full tool/function calling.
@@ -15,6 +15,10 @@
  */
 
 import { config } from "dotenv";
+import type Anthropic from "@anthropic-ai/sdk";
+import type { ChatCompletionMessageParam } from "groq-sdk/resources/chat/completions";
+import type { FunctionDeclaration } from "@google/generative-ai";
+import { resolveGeminiModel } from "./models.ts";
 import {
     getMcpToolsForAnthropic,
     getMcpToolsForGroq,
@@ -70,6 +74,21 @@ export interface AgentResult {
     toolCallCount: number;
 }
 
+async function callMcpToolWithRecovery(
+    name: string,
+    args: Record<string, unknown>,
+) {
+    try {
+        return await callMcpTool(name, args);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+            content: `Tool execution failed: ${message}. Inspect the available tables and schema, then retry.`,
+            isError: true,
+        };
+    }
+}
+
 // ─── Groq Tool-Use Loop ───────────────────────────────────────────────────────
 
 async function runWithGroq(
@@ -111,7 +130,7 @@ async function runWithGroq(
             for (let i = 0; i < maxIter; i++) {
                 const response = await client.chat.completions.create({
                     model: modelName,
-                    messages,
+                    messages: messages as ChatCompletionMessageParam[],
                     tools,
                     tool_choice: "auto",
                     max_tokens: 2000,
@@ -137,7 +156,7 @@ async function runWithGroq(
 
                     if (verbose) console.log(`  → [Groq/${modelName}] MCP Tool: ${toolName}(${JSON.stringify(toolArgs).slice(0, 80)})`);
 
-                    const result = await callMcpTool(toolName, toolArgs);
+                    const result = await callMcpToolWithRecovery(toolName, toolArgs);
                     if (verbose) console.log(`    ↳ ${result.content.slice(0, 160)}${result.content.length > 160 ? "…" : ""}`);
 
                     messages.push({
@@ -188,9 +207,9 @@ async function runWithGemini(
     const SYSTEM_PROMPT = buildSystemPrompt(userId);
 
     const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
+        model: modelName,
         systemInstruction: SYSTEM_PROMPT,
-        tools: [{ functionDeclarations: mcpTools }],
+        tools: [{ functionDeclarations: mcpTools as unknown as FunctionDeclaration[] }],
     });
 
     const chat = model.startChat();
@@ -223,7 +242,7 @@ async function runWithGemini(
 
             if (verbose) console.log(`  → [Gemini] MCP Tool: ${name}(${JSON.stringify(args).slice(0, 80)})`);
 
-            const mcpResult = await callMcpTool(name, args as Record<string, unknown>);
+            const mcpResult = await callMcpToolWithRecovery(name, args as Record<string, unknown>);
 
             if (verbose) console.log(`    ↳ ${mcpResult.content.slice(0, 160)}${mcpResult.content.length > 160 ? "…" : ""}`);
 
@@ -256,7 +275,7 @@ async function runWithGemini(
     return {
         answer: finalAnswer,
         provider: "Gemini",
-        model: "gemini-1.5-flash",
+        model: modelName,
         toolCallCount,
     };
 }
@@ -313,7 +332,7 @@ async function runWithAnthropic(
 
             if (verbose) console.log(`  → [Anthropic] MCP Tool: ${tu.name}(${JSON.stringify(toolArgs).slice(0, 80)})`);
 
-            const result = await callMcpTool(tu.name, toolArgs);
+            const result = await callMcpToolWithRecovery(tu.name, toolArgs);
 
             if (verbose) console.log(`    ↳ ${result.content.slice(0, 160)}${result.content.length > 160 ? "…" : ""}`);
 
@@ -409,12 +428,14 @@ export async function runMcpAgent(
 
     // ── 2. Run Multi-Provider AI Brain with MCP Database Tools ─────────────
     const errors: string[] = [];
+    let configuredProviderCount = 0;
 
     for (const provider of PROVIDERS) {
         if (!process.env[provider.keyEnv]) {
             if (verbose) console.log(`  ⚙  ${provider.name}: no API key — skipping`);
             continue;
         }
+        configuredProviderCount++;
 
         try {
             if (verbose) console.log(`\n🧠 Using ${provider.name} as AI brain...\n${"─".repeat(50)}`);
@@ -442,8 +463,12 @@ export async function runMcpAgent(
         }
     }
 
+    if (configuredProviderCount === 0) {
+        throw new Error("No AI provider is configured. Configure GROQ_API_KEY, GEMINI_API_KEY, or ANTHROPIC_API_KEY.");
+    }
+
     throw new Error(
-        `All AI providers failed:\n${errors.map((e) => `  • ${e}`).join("\n")}\n\n` +
-        `Set at least one key in .env.local:\n  GROQ_API_KEY / GEMINI_API_KEY / ANTHROPIC_API_KEY`,
+        `All configured AI providers failed:\n${errors.map((e) => `  • ${e}`).join("\n")}\n\n` +
+        "Provider credentials are present; review the model and MCP errors above.",
     );
 }

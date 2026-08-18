@@ -1,8 +1,8 @@
 /**
  * src/mcp/client.ts
  *
- * Connects to the official CockroachDB MCP Server binary
- * (github.com/cockroachdb/cockroachdb-mcp-server v0.1.0) via stdio transport.
+ * Connects to CockroachDB Cloud Managed MCP over HTTP in production.
+ * An explicit stdio command remains available for local development only.
  *
  * Exposes dynamic tool listing and execution helpers for pure MCP usage.
  * Supports converting MCP tools to Anthropic, Groq, and Gemini formats.
@@ -10,14 +10,11 @@
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { config } from "dotenv";
-import path from "path";
-import { fileURLToPath } from "url";
 import type Anthropic from "@anthropic-ai/sdk";
 
 config({ path: ".env.local" });
-
-const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -26,15 +23,39 @@ export interface McpQueryResult {
     isError: boolean;
 }
 
+export const DEFAULT_COCKROACH_MCP_URL = "https://cockroachlabs.cloud/mcp";
+
+export type McpTransportConfig =
+    | { kind: "http"; url: string; headers: Record<string, string> }
+    | { kind: "stdio"; command: string; databaseUrl: string };
+
+export function resolveMcpTransportConfig(
+    environment: NodeJS.ProcessEnv = process.env,
+): McpTransportConfig {
+    const command = environment["COCKROACH_MCP_STDIO_COMMAND"];
+    if (command) {
+        const databaseUrl = environment["DATABASE_URL"];
+        if (!databaseUrl) throw new Error("DATABASE_URL is required for local MCP stdio transport");
+        return { kind: "stdio", command, databaseUrl };
+    }
+
+    const apiKey = environment["COCKROACH_MCP_API_KEY"];
+    const clusterId = environment["COCKROACH_MCP_CLUSTER_ID"];
+    if (!apiKey) throw new Error("COCKROACH_MCP_API_KEY is required for Cloud MCP");
+    if (!clusterId) throw new Error("COCKROACH_MCP_CLUSTER_ID is required for Cloud MCP");
+    return {
+        kind: "http",
+        url: environment["COCKROACH_MCP_URL"] ?? DEFAULT_COCKROACH_MCP_URL,
+        headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "mcp-cluster-id": clusterId,
+        },
+    };
+}
+
 // ─── Singleton client ─────────────────────────────────────────────────────────
 
 let _client: Client | null = null;
-
-/** Absolute path to the pre-built binary in project bin/ */
-function binaryPath(): string {
-    const projectRoot = path.resolve(dirname, "..", "..");
-    return path.join(projectRoot, "bin", "cockroachdb-mcp-server.exe");
-}
 
 import { ensureCockroachRunning } from "../db/index.ts";
 
@@ -45,43 +66,39 @@ import { ensureCockroachRunning } from "../db/index.ts";
 export async function getMcpClient(): Promise<Client> {
     if (_client) return _client;
 
-    await ensureCockroachRunning();
+    const transportConfig = resolveMcpTransportConfig();
+    let transport: StreamableHTTPClientTransport | StdioClientTransport;
 
-    const dbUrl = process.env["DATABASE_URL"];
-    if (!dbUrl) {
-        throw new Error(
-            "DATABASE_URL is not set in .env.local — " +
-                "cannot start cockroachdb-mcp-server",
-        );
+    if (transportConfig.kind === "http") {
+        transport = new StreamableHTTPClientTransport(new URL(transportConfig.url), {
+            requestInit: {
+                headers: transportConfig.headers,
+            },
+        });
+    } else {
+        await ensureCockroachRunning();
+        const isLocalInsecure = transportConfig.databaseUrl.includes("sslmode=disable");
+        transport = new StdioClientTransport({
+            command: transportConfig.command,
+            args: [],
+            env: {
+                ...process.env,
+                CRDB_DATABASE_URL: transportConfig.databaseUrl,
+                CRDB_MCP_ALLOW_INSECURE_DB: isLocalInsecure ? "true" : "false",
+                CRDB_MCP_ENABLE_WRITE_QUERIES:
+                    process.env["CRDB_ALLOW_WRITES"] === "true" ? "true" : "false",
+                CRDB_MCP_ALLOW_PASSWORD_AUTH: "true",
+                NO_COLOR: "1",
+            } as Record<string, string>,
+        });
     }
-
-    const isLocalInsecure =
-        dbUrl.includes("sslmode=disable") ||
-        dbUrl.includes("localhost") ||
-        dbUrl.includes("127.0.0.1");
-
-    const transport = new StdioClientTransport({
-        command: binaryPath(),
-        args: [], // The binary takes zero args — all config is via env vars
-        env: {
-            ...process.env,
-            CRDB_DATABASE_URL: dbUrl,
-            CRDB_MCP_ALLOW_INSECURE_DB: isLocalInsecure ? "true" : "false",
-            // Write queries are disabled by default — only enable explicitly via env var.
-            // This prevents Claude from accidentally deleting or mutating real financial data.
-            CRDB_MCP_ENABLE_WRITE_QUERIES:
-                process.env["CRDB_ALLOW_WRITES"] === "true" ? "true" : "false",
-            CRDB_MCP_ALLOW_PASSWORD_AUTH: "true",
-            NO_COLOR: "1",
-        } as Record<string, string>,
-    });
 
     _client = new Client(
         { name: "personal-finance-agent", version: "1.0.0" },
         { capabilities: {} },
     );
 
-    await _client.connect(transport);
+    await _client.connect(transport as Parameters<Client["connect"]>[0]);
     return _client;
 }
 

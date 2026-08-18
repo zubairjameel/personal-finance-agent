@@ -15,6 +15,6 @@ export default [
     },
     eslintConfigPrettier,
     {
-        ignores: ["dist/**", "node_modules/**"],
+        ignores: [".aws-sam/**", "dist/**", "node_modules/**"],
     },
 ];

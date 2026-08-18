@@ -1,0 +1,12 @@
+{
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/aws/serverless-application-model/main/samtranslator/schema/schema.json": "template.yaml"
+  },
+  "yaml.customTags": [
+    "!Ref scalar",
+    "!Sub scalar",
+    "!Sub sequence",
+    "!GetAtt scalar",
+    "!GetAtt sequence"
+  ]
+}

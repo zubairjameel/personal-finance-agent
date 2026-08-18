@@ -245,7 +245,7 @@ export async function fullSync(userId: string): Promise<{
 // Standalone runner (npm run db:sync)
 // ---------------------------------------------------------------------------
 
-if (process.argv[1]?.endsWith("sync.ts")) {
+async function main(): Promise<void> {
     const { getOrCreateUser } = await import("../db/index.ts");
     const user = await getOrCreateUser();
     console.log(`Syncing for user ${user.id}…`);
@@ -257,4 +257,16 @@ if (process.argv[1]?.endsWith("sync.ts")) {
         );
     }
     await pool.end();
+}
+
+const invokedFile = process.argv[1]?.replaceAll("\\", "/");
+const isDirectExecution =
+    invokedFile?.endsWith("/sync.ts") === true ||
+    invokedFile?.endsWith("/sync.js") === true;
+
+if (isDirectExecution) {
+    main().catch((error) => {
+        console.error("Plaid sync failed:", error instanceof Error ? error.message : String(error));
+        pool.end().finally(() => process.exit(1));
+    });
 }

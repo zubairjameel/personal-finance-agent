@@ -18,29 +18,28 @@ import { runMcpAgent } from "../ai/mcp-agent.ts";
 
 config({ path: ".env.local" });
 
-const BOT_TOKEN = process.env["TELEGRAM_BOT_TOKEN"];
-const CHAT_ID = process.env["TELEGRAM_CHAT_ID"];
-
-const TELEGRAM_API_BASE = `https://api.telegram.org/bot${BOT_TOKEN}`;
+const botToken = () => process.env["TELEGRAM_BOT_TOKEN"];
+const chatId = () => process.env["TELEGRAM_CHAT_ID"];
+const telegramApiBase = () => `https://api.telegram.org/bot${botToken()}`;
 
 /**
  * Send a message via Telegram Bot API using native fetch.
  */
 export async function sendTelegramMessage(
     text: string,
-    chatId: string | number = CHAT_ID!,
+    targetChatId: string | number = chatId()!,
     parseMode: "HTML" | "Markdown" = "HTML",
 ): Promise<boolean> {
-    if (!BOT_TOKEN || !chatId) {
+    if (!botToken() || !targetChatId) {
         return false;
     }
 
     try {
-        const res = await fetch(`${TELEGRAM_API_BASE}/sendMessage`, {
+        const res = await fetch(`${telegramApiBase()}/sendMessage`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                chat_id: chatId,
+                chat_id: targetChatId,
                 text,
                 parse_mode: parseMode,
                 disable_web_page_preview: true,
@@ -105,7 +104,7 @@ function markdownToTelegramHtml(markdown: string): string {
  * Marks them as 'notified' once delivered.
  */
 export async function pushPendingAnomalyAlerts(userId: string): Promise<number> {
-    if (!BOT_TOKEN || !CHAT_ID) {
+    if (!botToken() || !chatId()) {
         return 0;
     }
 
@@ -117,7 +116,7 @@ export async function pushPendingAnomalyAlerts(userId: string): Promise<number> 
 
     for (const anomaly of pending) {
         const msg = formatAnomalyMessage(anomaly);
-        const sent = await sendTelegramMessage(msg, CHAT_ID);
+        const sent = await sendTelegramMessage(msg, chatId());
         if (sent) {
             sentCount++;
             if (anomaly.id) notifiedIds.push(anomaly.id);
@@ -136,7 +135,7 @@ export async function pushPendingAnomalyAlerts(userId: string): Promise<number> 
 let lastUpdateId = 0;
 let isPolling = false;
 
-interface TelegramUpdate {
+export interface TelegramUpdate {
     update_id: number;
     message?: {
         message_id: number;
@@ -147,18 +146,49 @@ interface TelegramUpdate {
     };
 }
 
-async function handleTelegramMessage(update: TelegramUpdate) {
+export interface TelegramUpdateDependencies {
+    sendMessage: typeof sendTelegramMessage;
+    getUser: typeof getOrCreateUser;
+    query: typeof pool.query;
+    runAgent: typeof runMcpAgent;
+    getAllowedChatId: () => string | undefined;
+}
+
+export function parseTelegramCommand(text: string): string | null {
+    const match = /^\/([a-z]+)(?:@[a-z0-9_]+)?(?:\s|$)/i.exec(text.trim());
+    return match?.[1]?.toLowerCase() ?? null;
+}
+
+const defaultUpdateDependencies: TelegramUpdateDependencies = {
+    sendMessage: sendTelegramMessage,
+    getUser: getOrCreateUser,
+    query: pool.query.bind(pool),
+    runAgent: runMcpAgent,
+    getAllowedChatId: chatId,
+};
+
+export function createTelegramUpdateHandler(
+    dependencies: TelegramUpdateDependencies = defaultUpdateDependencies,
+) {
+    return async (update: TelegramUpdate): Promise<void> => {
     const msg = update.message;
     if (!msg || !msg.text) return;
 
     const chatId = msg.chat.id;
+    const allowedChatId = dependencies.getAllowedChatId()?.trim();
+    if (!allowedChatId || String(chatId) !== allowedChatId) {
+        console.warn(`[Telegram] Ignoring unauthorized update ${update.update_id}`);
+        return;
+    }
+
     const userText = msg.text.trim();
+    const command = parseTelegramCommand(userText);
     const userName = msg.from?.first_name ?? "there";
 
-    console.log(`[Telegram] Message from ${userName} (${chatId}): "${userText}"`);
+    console.log(`[Telegram] Processing update ${update.update_id}`);
 
     // Command: /start or /help
-    if (userText === "/start" || userText === "/help") {
+    if (command === "start" || command === "help") {
         const welcome =
             `👋 <b>Hello ${escapeHtml(userName)}! I am Kadmus.</b>\n\n` +
             `I am your <b>24/7 Autonomous Financial Sentinel</b> with persistent CockroachDB memory.\n\n` +
@@ -173,19 +203,19 @@ async function handleTelegramMessage(update: TelegramUpdate) {
             `  <i>"What did I spend on food this month?"</i>\n` +
             `  <i>"Explain why I'm broke"</i>`;
 
-        await sendTelegramMessage(welcome, chatId);
+        await dependencies.sendMessage(welcome, chatId);
         return;
     }
 
     // Command: /status
-    if (userText === "/status") {
+    if (command === "status") {
         try {
-            const user = await getOrCreateUser();
-            const txnCount = await pool.query<{ count: string }>(
+            const user = await dependencies.getUser();
+            const txnCount = await dependencies.query<{ count: string }>(
                 `SELECT count(*) FROM spending_history WHERE user_id = $1`,
                 [user.id],
             );
-            const anomalyCount = await pool.query<{ count: string }>(
+            const anomalyCount = await dependencies.query<{ count: string }>(
                 `SELECT count(*) FROM anomalies WHERE user_id = $1`,
                 [user.id],
             );
@@ -201,19 +231,19 @@ async function handleTelegramMessage(update: TelegramUpdate) {
                 `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
                 `<i>24/7 Heartbeat Daemon is active.</i>`;
 
-            await sendTelegramMessage(statusMsg, chatId);
+            await dependencies.sendMessage(statusMsg, chatId);
         } catch (err) {
             const errorStr = err instanceof Error ? err.message : String(err);
-            await sendTelegramMessage(`❌ Error checking status: ${escapeHtml(errorStr)}`, chatId);
+            await dependencies.sendMessage(`❌ Error checking status: ${escapeHtml(errorStr)}`, chatId);
         }
         return;
     }
 
     // Command: /alerts
-    if (userText === "/alerts") {
+    if (command === "alerts") {
         try {
-            const user = await getOrCreateUser();
-            const recent = await pool.query<{
+            const user = await dependencies.getUser();
+            const recent = await dependencies.query<{
                 title: string;
                 amount: number;
                 severity: string;
@@ -224,7 +254,7 @@ async function handleTelegramMessage(update: TelegramUpdate) {
             );
 
             if (recent.rows.length === 0) {
-                await sendTelegramMessage(`✅ <b>No anomalies detected!</b> Your finances are clean.`, chatId);
+                await dependencies.sendMessage(`✅ <b>No anomalies detected!</b> Your finances are clean.`, chatId);
                 return;
             }
 
@@ -233,17 +263,15 @@ async function handleTelegramMessage(update: TelegramUpdate) {
                 const icon = r.severity === "CRITICAL" ? "🔴" : "🟡";
                 alertText += `${icon} <b>[${r.severity}]</b> ${escapeHtml(r.title)} ($${Number(r.amount).toFixed(2)})\n`;
             }
-            await sendTelegramMessage(alertText, chatId);
+            await dependencies.sendMessage(alertText, chatId);
         } catch (err) {
             const errorStr = err instanceof Error ? err.message : String(err);
-            await sendTelegramMessage(`❌ Error fetching alerts: ${escapeHtml(errorStr)}`, chatId);
+            await dependencies.sendMessage(`❌ Error fetching alerts: ${escapeHtml(errorStr)}`, chatId);
         }
         return;
     }
 
     // Default: Run Kadmus AI Reasoning Agent on the user's question
-    await sendTelegramMessage("🔍 <i>Kadmus is querying CockroachDB and analyzing your financial memory...</i>", chatId);
-
     try {
         const result = await runMcpAgent(userText, { verbose: false });
 
@@ -258,13 +286,16 @@ async function handleTelegramMessage(update: TelegramUpdate) {
         await sendTelegramMessage(`Something went wrong while analyzing your finances. Please try again in a moment.`, chatId);
         console.error(`[Kadmus] Agent error:`, errorStr);
     }
+    };
 }
+
+export const handleTelegramUpdate = createTelegramUpdateHandler();
 
 /**
  * Start long-polling loop for Telegram updates.
  */
 export async function startTelegramBot(): Promise<void> {
-    if (!BOT_TOKEN) {
+    if (!botToken()) {
         console.error("❌ TELEGRAM_BOT_TOKEN is not set in .env.local — cannot start Telegram bot.");
         return;
     }
@@ -273,24 +304,24 @@ export async function startTelegramBot(): Promise<void> {
     isPolling = true;
 
     // Send a startup greeting if CHAT_ID is configured
-    if (CHAT_ID) {
+    if (chatId()) {
         await sendTelegramMessage(
             "🛡️ <b>Kadmus Activated</b>\n" +
             "<i>24/7 Autonomous Financial Guardian is now online and connected.</i>",
-            CHAT_ID,
+            chatId(),
         );
     }
 
     while (isPolling) {
         try {
-            const url = `${TELEGRAM_API_BASE}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`;
+            const url = `${telegramApiBase()}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`;
             const res = await fetch(url);
             const data = (await res.json()) as { ok: boolean; result?: TelegramUpdate[] };
 
             if (data.ok && Array.isArray(data.result)) {
                 for (const update of data.result) {
                     lastUpdateId = Math.max(lastUpdateId, update.update_id);
-                    await handleTelegramMessage(update);
+                    await handleTelegramUpdate(update);
                 }
             }
         } catch (err) {
@@ -302,7 +333,12 @@ export async function startTelegramBot(): Promise<void> {
 }
 
 // Standalone runner if executed directly
-if (process.argv[1]?.includes("bot.ts") || process.argv[1]?.includes("bot.js")) {
+const invokedFile = process.argv[1]?.replaceAll("\\", "/");
+const isDirectExecution =
+    invokedFile?.endsWith("/bot.ts") === true ||
+    invokedFile?.endsWith("/bot.js") === true;
+
+if (isDirectExecution) {
     startTelegramBot().catch((err) => {
         console.error("Fatal Telegram bot error:", err);
         process.exit(1);

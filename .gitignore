@@ -1,7 +1,11 @@
 node_modules/
 dist/
+.aws-sam/
 .env
 .env.local
+.env.*
+!.env.example
+*.secret.json
 *.log
 .claude/settings.local.json
 # CockroachDB MCP binary (downloaded via setup script — not committed)

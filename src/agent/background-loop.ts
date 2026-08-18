@@ -233,7 +233,7 @@ function setupGracefulShutdown(intervalId?: ReturnType<typeof setInterval>) {
 
 // ─── Main entrypoint ────────────────────────────────────────────────────────
 
-async function main() {
+export async function main() {
     // Parse --interval=N flag (default 60 seconds)
     const intervalArg = process.argv
         .find((a) => a.startsWith("--interval="))

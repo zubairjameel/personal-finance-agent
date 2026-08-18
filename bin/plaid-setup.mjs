@@ -11,7 +11,7 @@
  */
 
 import { config } from "dotenv";
-import { PlaidApi, PlaidEnvironments, Configuration, Products, CountryCode } from "plaid";
+import { PlaidApi, PlaidEnvironments, Configuration, Products } from "plaid";
 
 config({ path: ".env.local" });
 

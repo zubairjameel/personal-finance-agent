@@ -1,7 +1,7 @@
 {
     "compilerOptions": {
         // File Layout
-        "rootDir": "./src",
+        "rootDir": ".",
         "outDir": "./dist",
 
         // Environment Settings
@@ -23,5 +23,6 @@
         "noUncheckedSideEffectImports": true,
         "moduleDetection": "force",
         "skipLibCheck": true
-    }
+    },
+    "include": ["src/**/*.ts", "tests/**/*.ts"]
 }
