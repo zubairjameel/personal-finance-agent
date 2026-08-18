@@ -1,11 +1,16 @@
-import { runHeartbeatCycle, type CycleResult } from "../agent/background-loop.ts";
+import type { CycleResult } from "../agent/background-loop.ts";
 import { loadApplicationSecrets } from "./secrets.ts";
 
 type HeartbeatRunner = () => Promise<CycleResult>;
 type SecretsLoader = (requiredKeys?: readonly string[]) => Promise<void>;
 
+const runHeartbeatCycleAfterSecrets: HeartbeatRunner = async () => {
+    const { runHeartbeatCycle } = await import("../agent/background-loop.ts");
+    return runHeartbeatCycle();
+};
+
 export function createHeartbeatHandler(
-    runCycle: HeartbeatRunner = runHeartbeatCycle,
+    runCycle: HeartbeatRunner = runHeartbeatCycleAfterSecrets,
     loadSecrets: SecretsLoader = loadApplicationSecrets,
 ) {
     return async (): Promise<{ statusCode: number; body: string }> => {

@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "crypto";
-import { handleTelegramUpdate, type TelegramUpdate } from "../telegram/bot.ts";
+import type { TelegramUpdate } from "../telegram/bot.ts";
 import { loadApplicationSecrets } from "./secrets.ts";
 
 export interface HttpEvent {
@@ -10,6 +10,11 @@ export interface HttpEvent {
 
 type UpdateHandler = (update: TelegramUpdate) => Promise<void>;
 type SecretsLoader = (requiredKeys?: readonly string[]) => Promise<void>;
+
+const handleTelegramUpdateAfterSecrets: UpdateHandler = async (update) => {
+    const { handleTelegramUpdate } = await import("../telegram/bot.ts");
+    await handleTelegramUpdate(update);
+};
 
 function header(event: HttpEvent, name: string): string | undefined {
     const sought = name.toLowerCase();
@@ -24,7 +29,7 @@ function secretsMatch(actual: string | undefined, expected: string): boolean {
 }
 
 export function createTelegramHandler(
-    processUpdate: UpdateHandler = handleTelegramUpdate,
+    processUpdate: UpdateHandler = handleTelegramUpdateAfterSecrets,
     loadSecrets: SecretsLoader = loadApplicationSecrets,
 ) {
     return async (event: HttpEvent): Promise<{ statusCode: number; body: string }> => {

@@ -5,12 +5,15 @@ import { createTelegramHandler } from "../src/lambda/telegram.ts";
 
 test("heartbeat invokes exactly one cycle", async () => {
     let calls = 0;
+    const order: string[] = [];
     const handler = createHeartbeatHandler(async () => {
+        order.push("cycle");
         calls++;
         return { cycleNumber: 1, timestamp: "now", plaidSynced: false, newAnomalies: 0, pendingAlerts: 0, errors: [] };
-    }, async () => {});
+    }, async () => { order.push("secrets"); });
     assert.equal((await handler()).statusCode, 200);
     assert.equal(calls, 1);
+    assert.deepEqual(order, ["secrets", "cycle"]);
 });
 
 test("Telegram rejects an invalid secret", async () => {
@@ -23,12 +26,23 @@ test("Telegram rejects an invalid secret", async () => {
 });
 
 test("Telegram accepts one valid update", async () => {
-    process.env["TELEGRAM_WEBHOOK_SECRET"] = "expected";
+    const previousSecret = process.env["TELEGRAM_WEBHOOK_SECRET"];
+    delete process.env["TELEGRAM_WEBHOOK_SECRET"];
     let updateId = 0;
-    const handler = createTelegramHandler(async (update) => { updateId = update.update_id; }, async () => {});
-    const result = await handler({ headers: { "x-telegram-bot-api-secret-token": "expected" }, body: '{"update_id":42}' });
-    assert.equal(result.statusCode, 200);
-    assert.equal(updateId, 42);
+    const order: string[] = [];
+    const handler = createTelegramHandler(
+        async (update) => { order.push("update"); updateId = update.update_id; },
+        async () => { order.push("secrets"); process.env["TELEGRAM_WEBHOOK_SECRET"] = "expected"; },
+    );
+    try {
+        const result = await handler({ headers: { "x-telegram-bot-api-secret-token": "expected" }, body: '{"update_id":42}' });
+        assert.equal(result.statusCode, 200);
+        assert.equal(updateId, 42);
+        assert.deepEqual(order, ["secrets", "update"]);
+    } finally {
+        if (previousSecret === undefined) delete process.env["TELEGRAM_WEBHOOK_SECRET"];
+        else process.env["TELEGRAM_WEBHOOK_SECRET"] = previousSecret;
+    }
 });
 
 test("importing daemon modules does not create active timers", async () => {

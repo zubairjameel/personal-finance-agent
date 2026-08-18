@@ -47,7 +47,6 @@ Resources:
       CodeUri: .
       Handler: src/lambda/heartbeat.handler
       Timeout: 120
-      ReservedConcurrentExecutions: 1
       Policies:
         - AWSSecretsManagerGetSecretValuePolicy:
             SecretArn: !Ref ApplicationSecretArn
