@@ -1,7 +1,5 @@
 # 🤖 Kadmus — Autonomous Financial Sentinel
 
-> Built for the **CockroachDB × AWS Hackathon 2026** (Submission Deadline: August 18, 2026).
-
 An autonomous, always-on AI personal finance sentinel inspired by the **OpenClaw agent architecture**. It links bank accounts via Plaid, uses **CockroachDB v25.4** as its long-term persistent memory with **Distributed Vector Indexing (768-dim embeddings)**, leverages the **CockroachDB Managed MCP Server** for open-ended financial reasoning, runs serverlessly via **AWS Lambda and Amazon EventBridge Scheduler**, and proactively alerts & interacts with the user in real-time on **Telegram** (`@KadmusFinanceBot`).
 
 ---
