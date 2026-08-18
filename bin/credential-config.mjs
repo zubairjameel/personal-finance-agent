@@ -24,6 +24,7 @@ export const CORE_KEYS = [
 ];
 
 export const OPTIONAL_KEYS = ["GROQ_API_KEY", "ANTHROPIC_API_KEY"];
+export const AI_CONFIG_KEYS = ["GEMINI_MODEL", "GEMINI_EMBEDDING_MODEL"];
 export const PLAID_KEYS = ["PLAID_CLIENT_ID", "PLAID_SANDBOX_SECRET", "PLAID_SANDBOX_ACCESS_TOKEN"];
 export const TELEGRAM_KEYS = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"];
 
@@ -81,7 +82,7 @@ export function buildSecretValues(environment) {
     }
 
     const values = {};
-    for (const key of [...CORE_KEYS, ...OPTIONAL_KEYS, ...PLAID_KEYS, ...TELEGRAM_KEYS]) {
+    for (const key of [...CORE_KEYS, ...OPTIONAL_KEYS, ...AI_CONFIG_KEYS, ...PLAID_KEYS, ...TELEGRAM_KEYS]) {
         if (configured(environment, key)) values[key] = environment[key];
     }
     return values;

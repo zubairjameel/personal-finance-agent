@@ -16,6 +16,7 @@
  */
 
 import { config } from "dotenv";
+import { resolveGeminiModel } from "./models.ts";
 config({ path: ".env.local" });
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -76,9 +77,10 @@ async function callGemini(
 ): Promise<AIResponse> {
     const { GoogleGenerativeAI } = await import("@google/generative-ai");
     const genAI = new GoogleGenerativeAI(process.env["GEMINI_API_KEY"]!);
+    const modelName = resolveGeminiModel();
 
     const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
+        model: modelName,
         ...(options.system ? { systemInstruction: options.system } : {}),
     });
 
@@ -96,7 +98,7 @@ async function callGemini(
     return {
         text: result.response.text(),
         provider: "Gemini",
-        model: "gemini-1.5-flash",
+        model: modelName,
     };
 }
 
@@ -158,6 +160,7 @@ export async function callAI(
     options: AIRequestOptions = {},
 ): Promise<AIResponse> {
     const errors: string[] = [];
+    let configuredProviderCount = 0;
 
     for (const provider of PROVIDERS) {
         // Skip if API key not configured
@@ -165,6 +168,7 @@ export async function callAI(
             console.log(`  ⚙  ${provider.name}: no key set, skipping.`);
             continue;
         }
+        configuredProviderCount++;
 
         try {
             console.log(`  🧠 Calling ${provider.name}...`);
@@ -178,8 +182,13 @@ export async function callAI(
         }
     }
 
+    if (configuredProviderCount === 0) {
+        throw new Error("No AI provider is configured. Configure GROQ_API_KEY, GEMINI_API_KEY, or ANTHROPIC_API_KEY.");
+    }
+
     throw new Error(
-        `All AI providers failed:\n${errors.map((e) => `  • ${e}`).join("\n")}\n\nSet at least one of: GROQ_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY in .env.local`,
+        `All configured AI providers failed:\n${errors.map((e) => `  • ${e}`).join("\n")}\n\n` +
+        "Provider credentials are present; review the provider errors above.",
     );
 }
 

@@ -25,6 +25,33 @@ test("/status uses injected database and Telegram dependencies", async () => {
     assert.match(sent[0] ?? "", /Total Detected Anomalies:<\/b> 3/);
 });
 
+test("bot-qualified /alerts command queries alerts instead of invoking AI", async () => {
+    const sent: string[] = [];
+    let agentCalls = 0;
+    const dependencies: TelegramUpdateDependencies = {
+        sendMessage: async (message) => { sent.push(message); return true; },
+        getUser: async () => ({ id: "12345678-0000-0000-0000-000000000000" }),
+        query: (async () => ({
+            rows: [{ title: "Spending spike", amount: 125, severity: "HIGH", created_at: "now" }],
+            command: "SELECT", rowCount: 1, oid: 0, fields: [],
+        })) as TelegramUpdateDependencies["query"],
+        runAgent: async () => {
+            agentCalls++;
+            return { answer: "unused", provider: "test", model: "test", toolCallCount: 0 };
+        },
+        getAllowedChatId: () => "7",
+    };
+
+    const handle = createTelegramUpdateHandler(dependencies);
+    await handle({
+        update_id: 4,
+        message: { message_id: 4, chat: { id: 7 }, text: "/Alerts@KadmusFinanceBot", date: 0 },
+    });
+
+    assert.equal(agentCalls, 0);
+    assert.match(sent[0] ?? "", /Recent Financial Anomalies/);
+});
+
 test("unauthorized Telegram chats cannot reach database, messaging, or AI", async () => {
     let dependencyCalls = 0;
     const dependencies: TelegramUpdateDependencies = {

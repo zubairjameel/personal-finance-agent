@@ -142,6 +142,11 @@ export interface TelegramUpdateDependencies {
     getAllowedChatId: () => string | undefined;
 }
 
+export function parseTelegramCommand(text: string): string | null {
+    const match = /^\/([a-z]+)(?:@[a-z0-9_]+)?(?:\s|$)/i.exec(text.trim());
+    return match?.[1]?.toLowerCase() ?? null;
+}
+
 const defaultUpdateDependencies: TelegramUpdateDependencies = {
     sendMessage: sendTelegramMessage,
     getUser: getOrCreateUser,
@@ -165,12 +170,13 @@ export function createTelegramUpdateHandler(
     }
 
     const userText = msg.text.trim();
+    const command = parseTelegramCommand(userText);
     const userName = msg.from?.first_name ?? "there";
 
     console.log(`[Telegram] Processing update ${update.update_id}`);
 
     // Command: /start or /help
-    if (userText === "/start" || userText === "/help") {
+    if (command === "start" || command === "help") {
         const welcome =
             `👋 <b>Hello ${escapeHtml(userName)}! I am Kadmus.</b>\n\n` +
             `I am your <b>24/7 Autonomous Financial Sentinel</b> with persistent CockroachDB memory.\n\n` +
@@ -190,7 +196,7 @@ export function createTelegramUpdateHandler(
     }
 
     // Command: /status
-    if (userText === "/status") {
+    if (command === "status") {
         try {
             const user = await dependencies.getUser();
             const txnCount = await dependencies.query<{ count: string }>(
@@ -222,7 +228,7 @@ export function createTelegramUpdateHandler(
     }
 
     // Command: /alerts
-    if (userText === "/alerts") {
+    if (command === "alerts") {
         try {
             const user = await dependencies.getUser();
             const recent = await dependencies.query<{
