@@ -283,14 +283,8 @@ export async function main() {
     }
 }
 
-const invokedFile = process.argv[1]?.replaceAll("\\", "/");
-const isDirectExecution =
-    invokedFile?.endsWith("/background-loop.ts") === true ||
-    invokedFile?.endsWith("/background-loop.js") === true;
-
-if (isDirectExecution) {
-    main().catch((err) => {
-        console.error(c.red("💥 Fatal error in background daemon:"), err);
-        pool.end().finally(() => process.exit(1));
-    });
-}
+// ── Always run — this file is always invoked directly via npm scripts ────────
+main().catch((err) => {
+    console.error(c.red("💥 Fatal error in background daemon:"), err);
+    pool.end().finally(() => process.exit(1));
+});

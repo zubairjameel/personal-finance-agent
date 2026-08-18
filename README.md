@@ -37,22 +37,13 @@ For the hackathon submission criteria, here is the exact breakdown of how Kadmus
 │                                     AWS CLOUD                                           │
 │                                                                                         │
 │   ┌────────────────────────┐         ┌──────────────────────────────────────────────┐   │
-│   │ EVENTBRIDGE SCHEDULER  │ ──────► │        KADMUS HEARTBEAT LAMBDA               │   │
-│   │    rate(5 minutes)     │         │  • One heartbeat cycle per invocation        │   │
-│   └────────────────────────┘         │  • Plaid sync + anomaly detection            │   │
-│                                      │  • Telegram alert dispatch                   │   │
-│                                      └──────────────────┬───────────────────────────┘   │
-│                                                         │                               │
-│   ┌────────────────────────┐         ┌──────────────────────────────────────────────┐   │
-│   │ API GATEWAY HTTP API   │ ──────► │       TELEGRAM WEBHOOK LAMBDA               │   │
-│   │   /telegram webhook    │         │  • Verify secret • Enqueue • Return 200     │   │
-│   └───────────▲────────────┘         └──────────────────┬───────────────────────────┘   │
-│               │                                        ▼                               │
-│               │                      ┌──────────────────────────────────────────────┐   │
-│               │                      │ SQS FIFO ──► TELEGRAM AI WORKER LAMBDA       │   │
-│               │                      │ • Deduplicate update_id • Long MCP/AI jobs   │   │
-│               │                      └──────────────────────────────────────────────┘   │
-│   CloudWatch Logs • Secrets Manager • SQS Dead-Letter Queues                           │
+│   │    AWS EC2 HOST        │         │             AMAZON BEDROCK / AI              │   │
+│   │  (24/7 Daemon Runner)  │         │          (Multi-Provider Cascade)            │   │
+│   │                        │         │                                              │   │
+│   │  • Heartbeat Loop (60s)│ ◄─────► │  • Amazon Bedrock (Nova Pro / Claude)        │   │
+│   │  • Telegram Bot Poller │         │  • Groq / Gemini Ultra-Fast Fallback         │   │
+│   │  • Anomaly Detector    │         └──────────────────────────────────────────────┘   │
+│   └───────────┬────────────┘                                                            │
 └───────────────┼─────────────────────────────────────────────────────────────────────────┘
                 │
                 ├───────────────────────────────────────┐
@@ -83,7 +74,7 @@ For the hackathon submission criteria, here is the exact breakdown of how Kadmus
 | **CockroachDB Tool 1** | **CockroachDB Managed MCP Server** (15 Native SQL discovery & query tools over stdio) | ✅ Completed |
 | **CockroachDB Tool 2** | **CockroachDB Distributed Vector Indexing** (`agent_memory` with 768-dim vectors & outcome verification) | ✅ Completed |
 | **CockroachDB Tool 3** | **CockroachDB Agent Skills** (`cockroachdb-sql`, `designing-application-transactions`) | ✅ Completed |
-| **AWS Infrastructure** | **AWS Lambda** (heartbeat + webhook + AI worker), **EventBridge Scheduler**, **API Gateway HTTP API**, **SQS FIFO/DLQ**, and **CloudWatch Logs** via AWS SAM | ✅ Built & Locally Validated |
+| **AWS Infrastructure** | **AWS EC2** (Hosts 24/7 background sentinel daemon) + **Amazon Bedrock** integration | ✅ Completed |
 | **Core Database** | CockroachDB v25.4 (CCL Distributed SQL, Views, Indexes) | ✅ Completed |
 | **Financial API** | Plaid API Sandbox (`transactionsSync`, `identityGet`, `liabilitiesGet`) | ✅ Completed |
 | **User Interface** | Telegram Bot API (`@KadmusFinanceBot` with real-time push & interactive Q&A) | ✅ Completed |
@@ -120,20 +111,7 @@ TELEGRAM_CHAT_ID=your_chat_id
 PLAID_CLIENT_ID=your_plaid_client_id
 PLAID_SANDBOX_SECRET=your_plaid_secret
 ```
-```bash
-npm run setup
-```
 
-For AWS, first authenticate the AWS CLI, then sync the completed local configuration:
-
-```bash
-npm run aws:sync-secret
-```
-
-The command shows the target AWS account, region, secret ID, and key names before
-asking for confirmation. It updates the existing `kadmus/application` secret only;
-it does not deploy or create AWS resources. Telegram credentials are required for
-this production sync because the deployed Lambda cannot read local `.env.local`.
 ### Step 3: Initialize CockroachDB & Seed Sample Data
 
 ```bash

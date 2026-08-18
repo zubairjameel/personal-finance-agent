@@ -12,8 +12,7 @@
  */
 
 import { config } from "dotenv";
-import { getPendingAnomalies, markAnomaliesNotified } from "../agent/anomaly-detector.ts";
-import type { DetectedAnomaly } from "../agent/anomaly-detector.ts";
+import { getPendingAnomalies, markAnomaliesNotified, type DetectedAnomaly } from "../agent/anomaly-detector.ts";
 import { getOrCreateUser, pool } from "../db/index.ts";
 import { runMcpAgent } from "../ai/mcp-agent.ts";
 
@@ -85,6 +84,19 @@ function escapeHtml(str: string): string {
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
+}
+
+function markdownToTelegramHtml(markdown: string): string {
+    let html = escapeHtml(markdown);
+    // Convert bold **text** or __text__ -> <b>text</b>
+    html = html.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+    html = html.replace(/__(.+?)__/g, "<b>$1</b>");
+    // Convert italic *text* or _text_ -> <i>text</i>
+    html = html.replace(/(?<![a-zA-Z0-9])\*([^*]+?)\*(?![a-zA-Z0-9])/g, "<i>$1</i>");
+    html = html.replace(/(?<![a-zA-Z0-9])_([^_]+?)_(?![a-zA-Z0-9])/g, "<i>$1</i>");
+    // Convert inline code `code` -> <code>code</code>
+    html = html.replace(/`([^`]+?)`/g, "<code>$1</code>");
+    return html;
 }
 
 /**
@@ -261,18 +273,18 @@ export function createTelegramUpdateHandler(
 
     // Default: Run Kadmus AI Reasoning Agent on the user's question
     try {
-        const result = await dependencies.runAgent(userText, { verbose: false });
-        const reply =
-            `🏛️ <b>KADMUS DIAGNOSIS</b>\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `${escapeHtml(result.answer)}\n` +
-            `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-            `🧠 <i>Powered by ${result.provider} (${result.model})</i>`;
+        const result = await runMcpAgent(userText, { verbose: false });
 
-        await dependencies.sendMessage(reply, chatId);
+        if (!result.answer || result.answer.trim() === "") {
+            await sendTelegramMessage("I couldn't find enough data to answer that. Try asking about your spending, income, or anomalies.", chatId);
+            return;
+        }
+
+        await sendTelegramMessage(markdownToTelegramHtml(result.answer), chatId);
     } catch (err) {
         const errorStr = err instanceof Error ? err.message : String(err);
-        await dependencies.sendMessage(`⚠️ <b>Kadmus Analysis Error:</b>\n${escapeHtml(errorStr)}`, chatId);
+        await sendTelegramMessage(`Something went wrong while analyzing your finances. Please try again in a moment.`, chatId);
+        console.error(`[Kadmus] Agent error:`, errorStr);
     }
     };
 }
@@ -294,7 +306,7 @@ export async function startTelegramBot(): Promise<void> {
     // Send a startup greeting if CHAT_ID is configured
     if (chatId()) {
         await sendTelegramMessage(
-            "🛡️ <b>Kadmus Sentinel Activated</b>\n" +
+            "🛡️ <b>Kadmus Activated</b>\n" +
             "<i>24/7 Autonomous Financial Guardian is now online and connected.</i>",
             chatId(),
         );
