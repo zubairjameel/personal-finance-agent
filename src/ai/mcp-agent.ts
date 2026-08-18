@@ -67,6 +67,8 @@ Respond naturally and conversationally. Do NOT use markdown tables with vertical
 Be sharp, empathetic, and strictly grounded in database evidence.`;
 }
 
+export const SYSTEM_PROMPT = buildSystemPrompt("default");
+
 export interface AgentResult {
     answer: string;
     provider: string;
@@ -172,7 +174,7 @@ async function runWithGroq(
                 messages.push({ role: "user", content: "Based on the database data you just retrieved, please now provide your complete financial diagnosis." });
                 const synthRes = await client.chat.completions.create({
                     model: modelName,
-                    messages,
+                    messages: messages as any,
                     max_tokens: 2000,
                     temperature: 0.3,
                 });
@@ -205,6 +207,7 @@ async function runWithGemini(
     const genAI = new GoogleGenerativeAI(process.env["GEMINI_API_KEY"]!);
     const mcpTools = await getMcpToolsForGemini();
     const SYSTEM_PROMPT = buildSystemPrompt(userId);
+    const modelName = resolveGeminiModel();
 
     const model = genAI.getGenerativeModel({
         model: modelName,
