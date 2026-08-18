@@ -28,7 +28,12 @@ export function createTelegramHandler(
     loadSecrets: SecretsLoader = loadApplicationSecrets,
 ) {
     return async (event: HttpEvent): Promise<{ statusCode: number; body: string }> => {
-        await loadSecrets(["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET"]);
+        await loadSecrets([
+            "DATABASE_URL",
+            "TELEGRAM_BOT_TOKEN",
+            "TELEGRAM_CHAT_ID",
+            "TELEGRAM_WEBHOOK_SECRET",
+        ]);
         const expected = process.env["TELEGRAM_WEBHOOK_SECRET"];
         if (!expected) throw new Error("TELEGRAM_WEBHOOK_SECRET is not configured");
         if (!secretsMatch(header(event, "x-telegram-bot-api-secret-token"), expected)) {

@@ -4,6 +4,7 @@ import {
     decideMemoryAction,
     MEMORY_DISTANCE_THRESHOLD,
     saveAgentMemory,
+    searchSimilarMemory,
     type AgentMemoryRecord,
     type MemoryDependencies,
 } from "../src/ai/outcome-memory.ts";
@@ -52,4 +53,20 @@ test("embedding failure is explicit and does not save a fake vector", async () =
         /provider unavailable/,
     );
     assert.equal(queried, false);
+});
+
+test("similarity query contains only the vector index prefix filter", async () => {
+    let capturedSql = "";
+    const indexedQuery: MemoryDependencies = {
+        embed: async () => new Array<number>(768).fill(0.25),
+        query: async <T>(sql: string) => {
+            capturedSql = sql;
+            return { rows: [] as T[] };
+        },
+    };
+
+    await searchSimilarMemory("user-1", "question", MEMORY_DISTANCE_THRESHOLD, indexedQuery);
+
+    assert.match(capturedSql, /WHERE user_id = \$2\s+ORDER BY embedding <-> \$1::VECTOR\(768\)/i);
+    assert.doesNotMatch(capturedSql, /embedding IS NOT NULL/i);
 });

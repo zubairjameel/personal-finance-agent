@@ -95,7 +95,7 @@ export async function searchSimilarMemory(
             created_at AS "createdAt",
             updated_at AS "updatedAt"
          FROM agent_memory
-         WHERE user_id = $2 AND embedding IS NOT NULL
+         WHERE user_id = $2
          ORDER BY embedding <-> $1::VECTOR(768)
          LIMIT 1`,
         [vectorSql, userId],

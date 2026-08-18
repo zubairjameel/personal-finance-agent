@@ -139,6 +139,7 @@ export interface TelegramUpdateDependencies {
     getUser: typeof getOrCreateUser;
     query: typeof pool.query;
     runAgent: typeof runMcpAgent;
+    getAllowedChatId: () => string | undefined;
 }
 
 const defaultUpdateDependencies: TelegramUpdateDependencies = {
@@ -146,6 +147,7 @@ const defaultUpdateDependencies: TelegramUpdateDependencies = {
     getUser: getOrCreateUser,
     query: pool.query.bind(pool),
     runAgent: runMcpAgent,
+    getAllowedChatId: chatId,
 };
 
 export function createTelegramUpdateHandler(
@@ -156,6 +158,12 @@ export function createTelegramUpdateHandler(
     if (!msg || !msg.text) return;
 
     const chatId = msg.chat.id;
+    const allowedChatId = dependencies.getAllowedChatId()?.trim();
+    if (!allowedChatId || String(chatId) !== allowedChatId) {
+        console.warn(`[Telegram] Ignoring unauthorized update ${update.update_id}`);
+        return;
+    }
+
     const userText = msg.text.trim();
     const userName = msg.from?.first_name ?? "there";
 
