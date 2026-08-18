@@ -9,6 +9,7 @@ export interface HttpEvent {
 }
 
 type UpdateHandler = (update: TelegramUpdate) => Promise<void>;
+type SecretsLoader = (requiredKeys?: readonly string[]) => Promise<void>;
 
 function header(event: HttpEvent, name: string): string | undefined {
     const sought = name.toLowerCase();
@@ -22,9 +23,12 @@ function secretsMatch(actual: string | undefined, expected: string): boolean {
     return left.length === right.length && timingSafeEqual(left, right);
 }
 
-export function createTelegramHandler(processUpdate: UpdateHandler = handleTelegramUpdate) {
+export function createTelegramHandler(
+    processUpdate: UpdateHandler = handleTelegramUpdate,
+    loadSecrets: SecretsLoader = loadApplicationSecrets,
+) {
     return async (event: HttpEvent): Promise<{ statusCode: number; body: string }> => {
-        await loadApplicationSecrets();
+        await loadSecrets(["DATABASE_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET"]);
         const expected = process.env["TELEGRAM_WEBHOOK_SECRET"];
         if (!expected) throw new Error("TELEGRAM_WEBHOOK_SECRET is not configured");
         if (!secretsMatch(header(event, "x-telegram-bot-api-secret-token"), expected)) {

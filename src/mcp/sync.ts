@@ -13,7 +13,6 @@
  */
 
 import { config } from "dotenv";
-import { fileURLToPath } from "url";
 import { pool } from "../db/index.ts";
 import {
     Configuration,
@@ -260,9 +259,10 @@ async function main(): Promise<void> {
     await pool.end();
 }
 
-const isDirectExecution = process.argv[1]
-    ? fileURLToPath(import.meta.url) === process.argv[1]
-    : false;
+const invokedFile = process.argv[1]?.replaceAll("\\", "/");
+const isDirectExecution =
+    invokedFile?.endsWith("/sync.ts") === true ||
+    invokedFile?.endsWith("/sync.js") === true;
 
 if (isDirectExecution) {
     main().catch((error) => {

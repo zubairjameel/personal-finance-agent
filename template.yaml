@@ -16,13 +16,24 @@ Globals:
     Environment:
       Variables:
         APPLICATION_SECRET_ARN: !Ref ApplicationSecretArn
-        COCKROACH_MCP_URL: https://cockroachlabs.cloud/mcp
     LoggingConfig:
       LogFormat: JSON
       ApplicationLogLevel: INFO
       SystemLogLevel: INFO
 
 Resources:
+  HeartbeatLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/kadmus-heartbeat
+      RetentionInDays: 14
+
+  TelegramLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/kadmus-telegram
+      RetentionInDays: 14
+
   TelegramApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -43,8 +54,8 @@ Resources:
       BuildMethod: esbuild
       BuildProperties:
         EntryPoints: [src/lambda/heartbeat.ts]
-        Format: esm
-        OutExtension: [.js=.mjs]
+        Format: cjs
+        OutExtension: [.js=.cjs]
         Minify: true
         Sourcemap: true
         Target: es2022
@@ -70,8 +81,8 @@ Resources:
       BuildMethod: esbuild
       BuildProperties:
         EntryPoints: [src/lambda/telegram.ts]
-        Format: esm
-        OutExtension: [.js=.mjs]
+        Format: cjs
+        OutExtension: [.js=.cjs]
         Minify: true
         Sourcemap: true
         Target: es2022
@@ -124,3 +135,7 @@ Outputs:
     Value: !Sub https://${TelegramApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod/telegram
   HeartbeatFunctionArn:
     Value: !GetAtt HeartbeatFunction.Arn
+  HeartbeatFunctionName:
+    Value: !Ref HeartbeatFunction
+  TelegramFunctionName:
+    Value: !Ref TelegramFunction

@@ -34,6 +34,21 @@ export type MemoryDecision =
     | { action: "ABSTAIN"; memory: AgentMemoryRecord; reason: string }
     | { action: "FRESH_ANALYSIS"; memory: null; reason: string };
 
+export const MEMORY_DISTANCE_THRESHOLD = 1.1;
+
+export interface MemoryDependencies {
+    embed: (text: string) => Promise<number[]>;
+    query: <T>(sql: string, params: unknown[]) => Promise<{ rows: T[] }>;
+}
+
+const defaultDependencies: MemoryDependencies = {
+    embed: getEmbedding,
+    query: async <T>(sql: string, params: unknown[]) => {
+        const result = await pool.query(sql, params);
+        return { rows: result.rows as T[] };
+    },
+};
+
 /**
  * Save a new query + recommendation into CockroachDB with its 768-dim vector embedding.
  */
@@ -43,29 +58,15 @@ export async function saveAgentMemory(
     recommendation: string,
     outcome: MemoryOutcome = "pending",
     feedbackNotes: string | null = null,
+    dependencies: MemoryDependencies = defaultDependencies,
 ): Promise<AgentMemoryRecord> {
-    let vectorSql: string | null = null;
-
-    try {
-        const embedding = await getEmbedding(queryText);
-        vectorSql = formatVectorForCockroach(embedding);
-    } catch (err) {
-        console.warn(`[Memory] Embedding generation failed: ${err instanceof Error ? err.message : String(err)} — saving memory without vector.`);
-    }
-
-    const query = vectorSql
-        ? `INSERT INTO agent_memory (user_id, query_text, recommendation, embedding, outcome, feedback_notes)
+    const embedding = await dependencies.embed(queryText);
+    const vectorSql = formatVectorForCockroach(embedding);
+    const query = `INSERT INTO agent_memory (user_id, query_text, recommendation, embedding, outcome, feedback_notes)
            VALUES ($1, $2, $3, $4::VECTOR(768), $5, $6)
-           RETURNING id, user_id AS "userId", query_text AS "queryText", recommendation, outcome, feedback_notes AS "feedbackNotes", created_at AS "createdAt", updated_at AS "updatedAt"`
-        : `INSERT INTO agent_memory (user_id, query_text, recommendation, outcome, feedback_notes)
-           VALUES ($1, $2, $3, $4, $5)
            RETURNING id, user_id AS "userId", query_text AS "queryText", recommendation, outcome, feedback_notes AS "feedbackNotes", created_at AS "createdAt", updated_at AS "updatedAt"`;
-
-    const params = vectorSql
-        ? [userId, queryText, recommendation, vectorSql, outcome, feedbackNotes]
-        : [userId, queryText, recommendation, outcome, feedbackNotes];
-
-    const res = await pool.query<AgentMemoryRecord>(query, params);
+    const params = [userId, queryText, recommendation, vectorSql, outcome, feedbackNotes];
+    const res = await dependencies.query<AgentMemoryRecord>(query, params);
     return res.rows[0]!;
 }
 
@@ -76,18 +77,13 @@ export async function saveAgentMemory(
 export async function searchSimilarMemory(
     userId: string,
     queryText: string,
-    distanceThreshold: number = 1.10,
+    distanceThreshold: number = MEMORY_DISTANCE_THRESHOLD,
+    dependencies: MemoryDependencies = defaultDependencies,
 ): Promise<AgentMemoryRecord | null> {
-    let embedding: number[];
-    try {
-        embedding = await getEmbedding(queryText);
-    } catch {
-        return null;
-    }
-
+    const embedding = await dependencies.embed(queryText);
     const vectorSql = formatVectorForCockroach(embedding);
 
-    const res = await pool.query<AgentMemoryRecord>(
+    const res = await dependencies.query<AgentMemoryRecord>(
         `SELECT 
             id,
             user_id AS "userId",
@@ -122,8 +118,14 @@ export async function searchSimilarMemory(
 export async function decideMemoryAction(
     userId: string,
     queryText: string,
+    dependencies: MemoryDependencies = defaultDependencies,
 ): Promise<MemoryDecision> {
-    const similar = await searchSimilarMemory(userId, queryText);
+    const similar = await searchSimilarMemory(
+        userId,
+        queryText,
+        MEMORY_DISTANCE_THRESHOLD,
+        dependencies,
+    );
 
     if (!similar) {
         return {

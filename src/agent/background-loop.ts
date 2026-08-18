@@ -24,7 +24,6 @@
  */
 
 import { config } from "dotenv";
-import { fileURLToPath } from "url";
 import { getOrCreateUser, pool } from "../db/index.ts";
 import { fullSync } from "../mcp/sync.ts";
 import { detectAnomalies, getPendingAnomalies } from "./anomaly-detector.ts";
@@ -284,9 +283,10 @@ export async function main() {
     }
 }
 
-const isDirectExecution = process.argv[1]
-    ? fileURLToPath(import.meta.url) === process.argv[1]
-    : false;
+const invokedFile = process.argv[1]?.replaceAll("\\", "/");
+const isDirectExecution =
+    invokedFile?.endsWith("/background-loop.ts") === true ||
+    invokedFile?.endsWith("/background-loop.js") === true;
 
 if (isDirectExecution) {
     main().catch((err) => {

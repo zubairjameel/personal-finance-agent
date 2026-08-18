@@ -8,7 +8,7 @@ test("heartbeat invokes exactly one cycle", async () => {
     const handler = createHeartbeatHandler(async () => {
         calls++;
         return { cycleNumber: 1, timestamp: "now", plaidSynced: false, newAnomalies: 0, pendingAlerts: 0, errors: [] };
-    });
+    }, async () => {});
     assert.equal((await handler()).statusCode, 200);
     assert.equal(calls, 1);
 });
@@ -16,7 +16,7 @@ test("heartbeat invokes exactly one cycle", async () => {
 test("Telegram rejects an invalid secret", async () => {
     process.env["TELEGRAM_WEBHOOK_SECRET"] = "expected";
     let calls = 0;
-    const handler = createTelegramHandler(async () => { calls++; });
+    const handler = createTelegramHandler(async () => { calls++; }, async () => {});
     const result = await handler({ headers: { "X-Telegram-Bot-Api-Secret-Token": "wrong" }, body: '{"update_id":1}' });
     assert.equal(result.statusCode, 401);
     assert.equal(calls, 0);
@@ -25,7 +25,7 @@ test("Telegram rejects an invalid secret", async () => {
 test("Telegram accepts one valid update", async () => {
     process.env["TELEGRAM_WEBHOOK_SECRET"] = "expected";
     let updateId = 0;
-    const handler = createTelegramHandler(async (update) => { updateId = update.update_id; });
+    const handler = createTelegramHandler(async (update) => { updateId = update.update_id; }, async () => {});
     const result = await handler({ headers: { "x-telegram-bot-api-secret-token": "expected" }, body: '{"update_id":42}' });
     assert.equal(result.statusCode, 200);
     assert.equal(updateId, 42);

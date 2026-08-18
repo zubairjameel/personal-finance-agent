@@ -1,8 +1,8 @@
 /**
  * src/mcp/client.ts
  *
- * Connects to the official CockroachDB MCP Server binary
- * (github.com/cockroachdb/cockroachdb-mcp-server v0.1.0) via stdio transport.
+ * Connects to CockroachDB Cloud Managed MCP over HTTP in production.
+ * An explicit stdio command remains available for local development only.
  *
  * Exposes dynamic tool listing and execution helpers for pure MCP usage.
  * Supports converting MCP tools to Anthropic, Groq, and Gemini formats.
@@ -23,6 +23,36 @@ export interface McpQueryResult {
     isError: boolean;
 }
 
+export const DEFAULT_COCKROACH_MCP_URL = "https://cockroachlabs.cloud/mcp";
+
+export type McpTransportConfig =
+    | { kind: "http"; url: string; headers: Record<string, string> }
+    | { kind: "stdio"; command: string; databaseUrl: string };
+
+export function resolveMcpTransportConfig(
+    environment: NodeJS.ProcessEnv = process.env,
+): McpTransportConfig {
+    const command = environment["COCKROACH_MCP_STDIO_COMMAND"];
+    if (command) {
+        const databaseUrl = environment["DATABASE_URL"];
+        if (!databaseUrl) throw new Error("DATABASE_URL is required for local MCP stdio transport");
+        return { kind: "stdio", command, databaseUrl };
+    }
+
+    const apiKey = environment["COCKROACH_MCP_API_KEY"];
+    const clusterId = environment["COCKROACH_MCP_CLUSTER_ID"];
+    if (!apiKey) throw new Error("COCKROACH_MCP_API_KEY is required for Cloud MCP");
+    if (!clusterId) throw new Error("COCKROACH_MCP_CLUSTER_ID is required for Cloud MCP");
+    return {
+        kind: "http",
+        url: environment["COCKROACH_MCP_URL"] ?? DEFAULT_COCKROACH_MCP_URL,
+        headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "mcp-cluster-id": clusterId,
+        },
+    };
+}
+
 // ─── Singleton client ─────────────────────────────────────────────────────────
 
 let _client: Client | null = null;
@@ -36,38 +66,24 @@ import { ensureCockroachRunning } from "../db/index.ts";
 export async function getMcpClient(): Promise<Client> {
     if (_client) return _client;
 
-    const cloudUrl = process.env["COCKROACH_MCP_URL"];
-    const apiKey = process.env["COCKROACH_MCP_API_KEY"];
-    const clusterId = process.env["COCKROACH_MCP_CLUSTER_ID"];
+    const transportConfig = resolveMcpTransportConfig();
     let transport: StreamableHTTPClientTransport | StdioClientTransport;
 
-    if (cloudUrl) {
-        if (!apiKey) throw new Error("COCKROACH_MCP_API_KEY is required for Cloud MCP");
-        transport = new StreamableHTTPClientTransport(new URL(cloudUrl), {
+    if (transportConfig.kind === "http") {
+        transport = new StreamableHTTPClientTransport(new URL(transportConfig.url), {
             requestInit: {
-                headers: {
-                    Authorization: `Bearer ${apiKey}`,
-                    ...(clusterId ? { "mcp-cluster-id": clusterId } : {}),
-                },
+                headers: transportConfig.headers,
             },
         });
     } else {
-        const command = process.env["COCKROACH_MCP_STDIO_COMMAND"];
-        const dbUrl = process.env["DATABASE_URL"];
-        if (!command || !dbUrl) {
-            throw new Error(
-                "Configure COCKROACH_MCP_URL and COCKROACH_MCP_API_KEY for Cloud MCP, " +
-                    "or explicitly set COCKROACH_MCP_STDIO_COMMAND and DATABASE_URL for local development.",
-            );
-        }
         await ensureCockroachRunning();
-        const isLocalInsecure = dbUrl.includes("sslmode=disable");
+        const isLocalInsecure = transportConfig.databaseUrl.includes("sslmode=disable");
         transport = new StdioClientTransport({
-            command,
+            command: transportConfig.command,
             args: [],
             env: {
                 ...process.env,
-                CRDB_DATABASE_URL: dbUrl,
+                CRDB_DATABASE_URL: transportConfig.databaseUrl,
                 CRDB_MCP_ALLOW_INSECURE_DB: isLocalInsecure ? "true" : "false",
                 CRDB_MCP_ENABLE_WRITE_QUERIES:
                     process.env["CRDB_ALLOW_WRITES"] === "true" ? "true" : "false",

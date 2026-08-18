@@ -12,7 +12,6 @@
  */
 
 import { config } from "dotenv";
-import { fileURLToPath } from "url";
 import { getPendingAnomalies, markAnomaliesNotified } from "../agent/anomaly-detector.ts";
 import type { DetectedAnomaly } from "../agent/anomaly-detector.ts";
 import { getOrCreateUser, pool } from "../db/index.ts";
@@ -135,7 +134,24 @@ export interface TelegramUpdate {
     };
 }
 
-export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void> {
+export interface TelegramUpdateDependencies {
+    sendMessage: typeof sendTelegramMessage;
+    getUser: typeof getOrCreateUser;
+    query: typeof pool.query;
+    runAgent: typeof runMcpAgent;
+}
+
+const defaultUpdateDependencies: TelegramUpdateDependencies = {
+    sendMessage: sendTelegramMessage,
+    getUser: getOrCreateUser,
+    query: pool.query.bind(pool),
+    runAgent: runMcpAgent,
+};
+
+export function createTelegramUpdateHandler(
+    dependencies: TelegramUpdateDependencies = defaultUpdateDependencies,
+) {
+    return async (update: TelegramUpdate): Promise<void> => {
     const msg = update.message;
     if (!msg || !msg.text) return;
 
@@ -161,19 +177,19 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
             `  <i>"What did I spend on food this month?"</i>\n` +
             `  <i>"Explain why I'm broke"</i>`;
 
-        await sendTelegramMessage(welcome, chatId);
+        await dependencies.sendMessage(welcome, chatId);
         return;
     }
 
     // Command: /status
     if (userText === "/status") {
         try {
-            const user = await getOrCreateUser();
-            const txnCount = await pool.query<{ count: string }>(
+            const user = await dependencies.getUser();
+            const txnCount = await dependencies.query<{ count: string }>(
                 `SELECT count(*) FROM spending_history WHERE user_id = $1`,
                 [user.id],
             );
-            const anomalyCount = await pool.query<{ count: string }>(
+            const anomalyCount = await dependencies.query<{ count: string }>(
                 `SELECT count(*) FROM anomalies WHERE user_id = $1`,
                 [user.id],
             );
@@ -189,10 +205,10 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
                 `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
                 `<i>24/7 Heartbeat Daemon is active.</i>`;
 
-            await sendTelegramMessage(statusMsg, chatId);
+            await dependencies.sendMessage(statusMsg, chatId);
         } catch (err) {
             const errorStr = err instanceof Error ? err.message : String(err);
-            await sendTelegramMessage(`❌ Error checking status: ${escapeHtml(errorStr)}`, chatId);
+            await dependencies.sendMessage(`❌ Error checking status: ${escapeHtml(errorStr)}`, chatId);
         }
         return;
     }
@@ -200,8 +216,8 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
     // Command: /alerts
     if (userText === "/alerts") {
         try {
-            const user = await getOrCreateUser();
-            const recent = await pool.query<{
+            const user = await dependencies.getUser();
+            const recent = await dependencies.query<{
                 title: string;
                 amount: number;
                 severity: string;
@@ -212,7 +228,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
             );
 
             if (recent.rows.length === 0) {
-                await sendTelegramMessage(`✅ <b>No anomalies detected!</b> Your finances are clean.`, chatId);
+                await dependencies.sendMessage(`✅ <b>No anomalies detected!</b> Your finances are clean.`, chatId);
                 return;
             }
 
@@ -221,19 +237,19 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
                 const icon = r.severity === "CRITICAL" ? "🔴" : "🟡";
                 alertText += `${icon} <b>[${r.severity}]</b> ${escapeHtml(r.title)} ($${Number(r.amount).toFixed(2)})\n`;
             }
-            await sendTelegramMessage(alertText, chatId);
+            await dependencies.sendMessage(alertText, chatId);
         } catch (err) {
             const errorStr = err instanceof Error ? err.message : String(err);
-            await sendTelegramMessage(`❌ Error fetching alerts: ${escapeHtml(errorStr)}`, chatId);
+            await dependencies.sendMessage(`❌ Error fetching alerts: ${escapeHtml(errorStr)}`, chatId);
         }
         return;
     }
 
     // Default: Run Kadmus AI Reasoning Agent on the user's question
-    await sendTelegramMessage("🔍 <i>Kadmus is querying CockroachDB and analyzing your financial memory...</i>", chatId);
+    await dependencies.sendMessage("🔍 <i>Kadmus is querying CockroachDB and analyzing your financial memory...</i>", chatId);
 
     try {
-        const result = await runMcpAgent(userText, { verbose: false });
+        const result = await dependencies.runAgent(userText, { verbose: false });
         const reply =
             `🏛️ <b>KADMUS DIAGNOSIS</b>\n` +
             `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
@@ -241,12 +257,15 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
             `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
             `🧠 <i>Powered by ${result.provider} (${result.model})</i>`;
 
-        await sendTelegramMessage(reply, chatId);
+        await dependencies.sendMessage(reply, chatId);
     } catch (err) {
         const errorStr = err instanceof Error ? err.message : String(err);
-        await sendTelegramMessage(`⚠️ <b>Kadmus Analysis Error:</b>\n${escapeHtml(errorStr)}`, chatId);
+        await dependencies.sendMessage(`⚠️ <b>Kadmus Analysis Error:</b>\n${escapeHtml(errorStr)}`, chatId);
     }
+    };
 }
+
+export const handleTelegramUpdate = createTelegramUpdateHandler();
 
 /**
  * Start long-polling loop for Telegram updates.
@@ -290,9 +309,10 @@ export async function startTelegramBot(): Promise<void> {
 }
 
 // Standalone runner if executed directly
-const isDirectExecution = process.argv[1]
-    ? fileURLToPath(import.meta.url) === process.argv[1]
-    : false;
+const invokedFile = process.argv[1]?.replaceAll("\\", "/");
+const isDirectExecution =
+    invokedFile?.endsWith("/bot.ts") === true ||
+    invokedFile?.endsWith("/bot.js") === true;
 
 if (isDirectExecution) {
     startTelegramBot().catch((err) => {
