@@ -117,7 +117,20 @@ TELEGRAM_CHAT_ID=your_chat_id
 PLAID_CLIENT_ID=your_plaid_client_id
 PLAID_SANDBOX_SECRET=your_plaid_secret
 ```
+```bash
+npm run setup
+```
 
+For AWS, first authenticate the AWS CLI, then sync the completed local configuration:
+
+```bash
+npm run aws:sync-secret
+```
+
+The command shows the target AWS account, region, secret ID, and key names before
+asking for confirmation. It updates the existing `kadmus/application` secret only;
+it does not deploy or create AWS resources. Telegram credentials are required for
+this production sync because the deployed Lambda cannot read local `.env.local`.
 ### Step 3: Initialize CockroachDB & Seed Sample Data
 
 ```bash
